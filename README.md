@@ -31,8 +31,8 @@ This application utilizes a modern full-stack architecture deployed on Vercel:
     
 3.  Create a `.env` file and add the Supabase keys:
     
-VITE_SUPABASE_URL=https://grnnopjwbgomegbnqpsx.supabase.co
-VITE_SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdybm5vcGp3YmdvbWVnYm5xcHN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2NzM3OTQsImV4cCI6MjA4MDI0OTc5NH0.KjYedlh1HGZY8KBOfRK0LsqsZEiBNewf48gr1fctYe0
+VITE_SUPABASE_URL="Ask the owner for the url"
+VITE_SUPABASE_KEY="Ask the owner for the keys"
 
    
 4.  Run the local development server:
