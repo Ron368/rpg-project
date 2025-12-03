@@ -19,7 +19,7 @@ export async function testSupabaseConnection() {
     const { data, error } = await supabase
       .from('questions')
       .select('id') // Select only a small field for speed
-      .limit(1);            // Only fetch one record
+      .limit(1); // Only fetch one record
 
     if (error) {
       console.error("CONNECTION FAILED. Supabase Error:", error.message);
