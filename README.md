@@ -23,20 +23,27 @@ This application utilizes a modern full-stack architecture deployed on Vercel:
 
 # Setup Instructions
 1.  Clone the repository:
+    ```bash
     git clone [https://github.com/](https://github.com/)[your-username]/[repo-name].git
     cd [repo-name]
+    ```
 
 2.  Install dependencies:
+    ```bash
     npm install
+    ```
     
-3.  Create a `.env` file and add the Supabase keys:
-    
+4.  Create a `.env` file and add the Supabase keys:
+```bash
 VITE_SUPABASE_URL="Ask the owner for the url"
 VITE_SUPABASE_KEY="Ask the owner for the keys"
+```
 
    
 4.  Run the local development server:
+    ```bash
     npm run dev
+    ```
   
 
 # How to Play
