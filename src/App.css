@@ -1,8 +1,15 @@
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+.game-container {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
 }
 
 .logo {
@@ -39,4 +46,145 @@
 
 .read-the-docs {
   color: #888;
+}
+
+/* UI Hero Panel - Full UI Background Section */
+.ui-hero-panel {
+  text-align: center;
+  padding: 48px 24px;
+  background-color: #16213e;
+  background-size: 48px 48px;
+  background-repeat: repeat;
+  background-blend-mode: overlay;
+  border: 4px solid #00d4ff;
+  box-shadow: inset 0 0 18px rgba(0,0,0,0.85), 0 0 60px rgba(0,212,255,0.08);
+  margin: 0 0 12px 0;
+  width: 100%;
+  box-sizing: border-box;
+  image-rendering: pixelated;
+  min-height: calc(100vh - 16px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-hero-title {
+  color: #00d4ff;
+  margin: 0 0 12px 0;
+  text-shadow: 2px 2px 0px rgba(0,0,0,0.8);
+  font-family: 'Courier New', monospace;
+  font-size: 3.4rem;
+  letter-spacing: 4px;
+}
+
+.ui-tagline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #cbeeff;
+}
+
+.tagline-main {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.8);
+  font-family: 'Courier New', monospace;
+}
+
+.tagline-words {
+  display: inline-grid;
+  grid-auto-flow: column;
+  gap: 12px;
+  margin-top: 8px;
+  overflow: hidden;
+  height: 34px;
+  position: relative;
+}
+
+.tagline-words span {
+  display: inline-block;
+  padding: 10px 18px;
+  border: 2px solid rgba(0,212,255,0.18);
+  background: rgba(0,0,0,0.45);
+  color: #aee9ff;
+  font-weight: 800;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.6);
+  transform: translateY(0);
+  animation: taglineCycle 6s infinite;
+  font-size: 1.1rem;
+}
+
+.tagline-words span:nth-child(1) { animation-delay: 0s; }
+.tagline-words span:nth-child(2) { animation-delay: 2s; }
+.tagline-words span:nth-child(3) { animation-delay: 4s; }
+
+@keyframes taglineCycle {
+  0% { opacity: 0; transform: translateY(8px) scale(0.95); }
+  10% { opacity: 1; transform: translateY(0) scale(1); }
+  30% { opacity: 1; transform: translateY(0) scale(1); }
+  40% { opacity: 0; transform: translateY(-8px) scale(0.95); }
+  100% { opacity: 0; }
+}
+
+@media (max-width: 768px) {
+  .ui-hero-title { font-size: 2.0rem; }
+  .tagline-words { gap: 8px; height: 28px; }
+  .tagline-words span { padding: 6px 10px; font-size: 0.95rem; }
+}
+
+/* Battle result panel (used by BattleModalExample) */
+.battle-result {
+  margin: 1.5rem auto 0 auto;
+  padding: 1.6rem 2rem;
+  width: 820px;
+  max-width: calc(100% - 48px);
+  background: rgba(255, 255, 255, 0.06);
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.6), inset 0 0 12px rgba(255,255,255,0.02);
+  color: #ffffff;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  line-height: 1.6;
+  animation: resultPop 360ms cubic-bezier(.2,.9,.3,1);
+}
+.battle-result.victory { border-color: rgba(76,175,80,0.9); box-shadow: 0 12px 36px rgba(76,175,80,0.06); }
+.battle-result.defeat { border-color: rgba(244,67,54,0.9); box-shadow: 0 12px 36px rgba(244,67,54,0.06); }
+.battle-result h3,
+.battle-result h2 { margin: 0 0 8px 0; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.6); }
+.battle-result .result-line { color: rgba(255,255,255,0.95); font-size: 1.05rem; margin: 6px 0; }
+.battle-result .result-small { color: rgba(255,255,255,0.8); font-size: 0.95rem; }
+
+@keyframes resultPop {
+  from { transform: translateY(6px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  .battle-result { width: calc(100% - 24px); padding: 1rem; }
+  .battle-result .result-line { font-size: 1rem; }
+}
+
+/* Inline Battle Example inside hero panel */
+.battle-inline {
+  margin-top: 22px;
+  padding: 12px 8px 0 8px;
+  border-top: 2px solid rgba(0,212,255,0.06);
+  width: 720px;
+  max-width: calc(100% - 48px);
+}
+
+/* Slight adjustments for the start button when inline */
+.battle-inline button {
+  cursor: pointer;
+  /* Keep start button font-size stable regardless of global changes */
+  font-size: 1.2rem;
+}
+
+@media (max-width: 768px) {
+  .battle-inline > button { font-size: 1rem; }
 }

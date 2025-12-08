@@ -3,11 +3,19 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Access the environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-// Initialize the Supabase Client
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Log if Supabase is configured (for debugging)
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('⚠️ Supabase credentials not found in .env file. BattleModal will use fallback questions.');
+}
+
+// Initialize the Supabase Client (use dummy values if not configured to prevent crashes)
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key'
+);
 
 // --- The Test Function ---
 export async function testSupabaseConnection() {
