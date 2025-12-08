@@ -36,7 +36,7 @@ This application utilizes a modern full-stack architecture deployed on Vercel:
 4.  Create a `.env` file and add the Supabase keys:
 ```bash
 VITE_SUPABASE_URL="Ask the owner for the url"
-VITE_SUPABASE_KEY="Ask the owner for the keys"
+VITE_SUPABASE_ANON_KEY="Ask the owner for the keys"
 ```
 
    
