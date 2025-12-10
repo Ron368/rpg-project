@@ -109,6 +109,34 @@
   min-height: 0;
 }
 
+/* Decorative modal background art using UI pack images */
+.modal-bg-art {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-repeat: repeat;
+  background-size: 128px 128px;
+  opacity: 0.12;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.modal-bg-decor {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 160px;
+  height: 160px;
+  background-repeat: no-repeat;
+  background-size: contain;
+  opacity: 0.18;
+  z-index: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.6));
+}
+
 .close-button-wrapper {
   position: relative;
   z-index: 2;
