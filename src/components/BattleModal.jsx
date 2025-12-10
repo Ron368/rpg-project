@@ -10,49 +10,85 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
   const [timeRemaining, setTimeRemaining] = useState(60); // 1 minute countdown
   const [playerHealth, setPlayerHealth] = useState(100);
   const [monsterHealth, setMonsterHealth] = useState(100);
-  const [incorrectAttempts, setIncorrectAttempts] = useState(0);
+  // incorrectAttempts removed per updated rules
   const [isAnswered, setIsAnswered] = useState(false);
+  const [waitingNext, setWaitingNext] = useState(false);
   const [isCriticalHit, setIsCriticalHit] = useState(false);
   const [battleStartTime, setBattleStartTime] = useState(null);
   const [timeDeducted, setTimeDeducted] = useState(0);
+  const [pointsEarned, setPointsEarned] = useState(0);
   const [showFeedback, setShowFeedback] = useState(null); // 'correct', 'incorrect', or null
+  const [roundResult, setRoundResult] = useState(null);
   const timerRef = useRef(null);
   const questionStartTimeRef = useRef(null);
+  const questionTimeoutRef = useRef(null);
+  const playerHealthRef = useRef(100);
+  const monsterHealthRef = useRef(100);
+
+  // keep refs in sync with state so handlers can read latest values synchronously
+  useEffect(() => {
+    playerHealthRef.current = playerHealth;
+    monsterHealthRef.current = monsterHealth;
+  }, [playerHealth, monsterHealth]);
 
   // Fetch question from Supabase when modal opens
   useEffect(() => {
     if (isOpen && !question) {
+      // New battle opened: initialize HP and fetch first question
+      setPlayerHealth(100);
+      setMonsterHealth(100);
+      setPointsEarned(0);
       fetchQuestion();
       setBattleStartTime(Date.now());
       questionStartTimeRef.current = Date.now();
     }
-    // Reset question when modal closes
+    // Reset question and health when modal closes
     if (!isOpen) {
       setQuestion(null);
       setOptions([]);
+      setPlayerHealth(100);
+      setMonsterHealth(100);
+      setPointsEarned(0);
+      setTimeRemaining(60);
+      setShowFeedback(null);
+      setSelectedAnswer(null);
     }
   }, [isOpen]);
 
-  // Timer countdown effect
+  // Timer countdown effect - start once when modal opens and run continuously
   useEffect(() => {
-    if (isOpen && timeRemaining > 0 && !isAnswered) {
-      timerRef.current = setInterval(() => {
-        setTimeRemaining((prev) => {
-          if (prev <= 1) {
-            handleTimeOut();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      return () => {
-        if (timerRef.current) {
-          clearInterval(timerRef.current);
-        }
-      };
+    if (!isOpen) return;
+    if (timerRef.current) {
+      // already running
+      return;
     }
-  }, [isOpen, timeRemaining, isAnswered]);
+    timerRef.current = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          handleTimeOut();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [isOpen]);
+
+  // Watch overall timer for the "15 seconds left" per-question timeout
+  useEffect(() => {
+    if (!isOpen) return;
+    // When overall timer reaches 15s and a question is active and not answered,
+    // apply the per-question timeout penalty (user requested: timeout when 15s left)
+    if (timeRemaining === 15 && question && !showFeedback && !waitingNext) {
+      handleQuestionTimeout();
+    }
+  }, [timeRemaining, isOpen, question, showFeedback, waitingNext]);
 
   // Fetch a random question from Supabase
   const fetchQuestion = async () => {
@@ -62,8 +98,9 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
         .select('*')
         .limit(100); // Fetch multiple to randomize
 
-      if (error) {
-        console.error('Error fetching question:', error);
+      // If there's an error OR no rows returned, use fallback
+      if (error || !data || data.length === 0) {
+        if (error) console.error('Error fetching question:', error);
         // Fallback question for testing
         const fallback = {
           id: 1,
@@ -76,6 +113,8 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
         setQuestion(fallback);
         // set question start time for fallback
         questionStartTimeRef.current = Date.now();
+        // ensure overall timer remains 60s
+        setTimeRemaining(60);
         // Shuffle and set options for fallback as well
         setOptions(shuffleArray([
           fallback.correct_answer,
@@ -85,21 +124,73 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
         ]));
       } else if (data && data.length > 0) {
         // Randomly select a question
-        const randomQuestion = data[Math.floor(Math.random() * data.length)];
-        setQuestion(randomQuestion);
+        const raw = data[Math.floor(Math.random() * data.length)];
+
+        // Normalize row into expected question shape used by this component
+        const mapped = {
+          id: raw.id || raw.question_id || null,
+          // support multiple possible column names
+          question: raw.question || raw.question_text || raw.prompt || raw.q || '',
+          correct_answer: raw.correct_answer || raw.correct_answers || raw.answer || raw.correct || null,
+          // keep raw attached for advanced usages
+          __raw: raw
+        };
+
+        // Build visible choices: if DB provides explicit choice fields (choice_a..d or choice_1..4) use those ONLY
+        let choices = [];
+        if (raw.choice_a || raw.choice_b || raw.choice_c || raw.choice_d) {
+          choices = [raw.choice_a, raw.choice_b, raw.choice_c, raw.choice_d].filter(Boolean);
+        } else if (raw.choice_1 || raw.choice_2 || raw.choice_3 || raw.choice_4) {
+          choices = [raw.choice_1, raw.choice_2, raw.choice_3, raw.choice_4].filter(Boolean);
+        } else if (raw.choices && Array.isArray(raw.choices) && raw.choices.length >= 1) {
+          choices = raw.choices.slice(0,4).filter(Boolean);
+        } else {
+          // fallback to previous schema: correct + wrong answers
+          const wrong1 = raw.wrong_answer_1 || raw.choice_a || raw.choice_1 || null;
+          const wrong2 = raw.wrong_answer_2 || raw.choice_b || raw.choice_2 || null;
+          const wrong3 = raw.wrong_answer_3 || raw.choice_c || raw.choice_3 || null;
+          choices = [mapped.correct_answer, wrong1, wrong2, wrong3].filter(Boolean);
+        }
+
+        setQuestion(mapped);
         // set question start time right after question is set
         questionStartTimeRef.current = Date.now();
-        // Shuffle options
-        const shuffledOptions = shuffleArray([
-          randomQuestion.correct_answer,
-          randomQuestion.wrong_answer_1,
-          randomQuestion.wrong_answer_2,
-          randomQuestion.wrong_answer_3
-        ]);
+        // Shuffle visible options
+        const shuffledOptions = shuffleArray(choices);
         setOptions(shuffledOptions);
       }
     } catch (err) {
       console.error('Error fetching question:', err);
+    }
+  };
+
+  // Record round result to Supabase (best-effort)
+  const recordRoundToSupabase = async (battleResult) => {
+    try {
+      // Build a generic payload; tables/columns may vary so we try a common shape
+      const payload = {
+        question_id: question && (question.id || (question.__raw && question.__raw.id)) || null,
+        result: battleResult.victory ? 'win' : 'loss',
+        points: battleResult.pointsEarned || 0,
+        is_critical: !!battleResult.isCriticalHit,
+        player_health: battleResult.playerHealth || null,
+        monster_health: battleResult.monsterHealth || null,
+        created_at: new Date().toISOString()
+      };
+
+      // Try to insert into a `round_results` table (if it exists)
+      const { data: insertData, error: insertError } = await supabase
+        .from('round_results')
+        .insert([payload]);
+
+      if (insertError) {
+        // Not fatal — many projects won't have this table. Log for debugging.
+        console.debug('Could not record round to Supabase (round_results):', insertError.message || insertError);
+      } else {
+        console.debug('Round recorded to Supabase:', insertData);
+      }
+    } catch (e) {
+      console.debug('Supabase record failed:', e.message || e);
     }
   };
 
@@ -113,129 +204,218 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
     return shuffled;
   };
 
+  // Persist points to localStorage and leaderboard
+  const persistPointsAndLeaderboard = (points) => {
+    try {
+      const key = 'syntax-slayer-points';
+      const prev = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+      localStorage.setItem(key, String(prev + points));
+
+      // push leaderboard entry
+      const lbKey = 'syntax-slayer-leaderboard';
+      const raw = localStorage.getItem(lbKey);
+      const list = raw ? JSON.parse(raw) : [];
+      list.unshift({
+        date: new Date().toISOString(),
+        points,
+        total: prev + points,
+        question: question ? question.question : null
+      });
+      // keep only last 50 entries
+      localStorage.setItem(lbKey, JSON.stringify(list.slice(0, 50)));
+    } catch (e) {
+      console.warn('Could not access localStorage to save points/leaderboard', e);
+    }
+  };
+
   // Handle answer selection
   const handleAnswerSelect = (answer) => {
-    if (isAnswered) return;
+    // prevent selecting while feedback shown or waiting for next
+    if (showFeedback || waitingNext) return;
 
     setSelectedAnswer(answer);
-    const answerTime = Date.now() - questionStartTimeRef.current;
+    const answerTime = Date.now() - (questionStartTimeRef.current || Date.now());
     const answerTimeSeconds = Math.floor(answerTime / 1000);
 
     // Check if answer is correct
-    const isCorrect = answer === question.correct_answer;
+    const isCorrect = question && answer === question.correct_answer;
+
 
     if (isCorrect) {
-      // Check for Critical Hit (answered within 10 seconds)
-      const critical = answerTimeSeconds <= 10;
+      // Check for Critical Hit (answered within 15 seconds)
+      const critical = answerTimeSeconds <= 15;
       setIsCriticalHit(critical);
 
       setShowFeedback('correct');
-      setIsAnswered(true);
 
-      // Calculate damage (Critical Hit does more damage)
+      // Calculate damage (Critical Hit does 50% damage)
       const damage = critical ? 50 : 30;
-      setMonsterHealth((prev) => Math.max(0, prev - damage));
+      const newMonsterHealth = Math.max(0, monsterHealthRef.current - damage);
+      // apply immediately and update ref so other handlers read latest value
+      monsterHealthRef.current = newMonsterHealth;
+      setMonsterHealth(newMonsterHealth);
 
-      // Wait a moment then close or proceed
+      // Award points and persist to leaderboard
+      const points = critical ? 200 : 100;
+      setPointsEarned(points);
+      persistPointsAndLeaderboard(points);
+
+      // Wait a moment then proceed to round completion handling
       setTimeout(() => {
-        handleBattleEnd(true);
-      }, 2000);
+        onRoundComplete({ monsterHealth: newMonsterHealth, pointsEarned: points, isCriticalHit: critical });
+      }, 1200);
     } else {
-      // Wrong answer
+      // Wrong answer: apply -25% HP to player
       setShowFeedback('incorrect');
-      
-      // Deduct time (5 seconds per wrong answer)
-      const timePenalty = 5;
-      setTimeRemaining((prev) => Math.max(0, prev - timePenalty));
-      setTimeDeducted((prev) => prev + timePenalty);
+      const playerDamage = 25; // percent
+      const newPlayerHealth = Math.max(0, playerHealthRef.current - playerDamage);
+      // update ref first so synchronous handlers see the latest value
+      playerHealthRef.current = newPlayerHealth;
+      setPlayerHealth(newPlayerHealth);
 
-      // Player takes damage
-      const playerDamage = 10;
-      setPlayerHealth((prev) => Math.max(0, prev - playerDamage));
-
-      // Increment incorrect attempts and check if max reached
-      setIncorrectAttempts((prev) => {
-        const newCount = prev + 1;
-        // Check if max attempts reached (3 total)
-        if (newCount >= 3) {
-          setTimeout(() => {
-            handleBattleEnd(false);
-          }, 2000);
-        } else {
-          // Allow retry after showing feedback
-          setTimeout(() => {
-            setShowFeedback(null);
-            setSelectedAnswer(null);
-          }, 1500);
-        }
-        return newCount;
-      });
+      // No attempts tracking: show feedback then proceed to round completion
+      setTimeout(() => {
+        setShowFeedback(null);
+        setSelectedAnswer(null);
+        onRoundComplete({ playerHealth: newPlayerHealth });
+      }, 1500);
     }
   };
 
-  // Handle time running out
+  // Handle time running out (overall timer reaches 0)
   const handleTimeOut = () => {
-    if (isAnswered) return;
+    if (showFeedback || waitingNext) return;
 
-    setIsAnswered(true);
     setShowFeedback('timeout');
-    
-    // Player takes significant damage
-    setPlayerHealth((prev) => Math.max(0, prev - 25));
+
+    // Overall timeout penalty: deduct 25% from player health
+    const newPlayerHealth = Math.max(0, playerHealthRef.current - 25);
+    playerHealthRef.current = newPlayerHealth;
+    setPlayerHealth(newPlayerHealth);
+
+    // clear per-question timeout if any
+    if (questionTimeoutRef.current) {
+      clearTimeout(questionTimeoutRef.current);
+      questionTimeoutRef.current = null;
+    }
+
+    setPointsEarned(0);
 
     setTimeout(() => {
-      handleBattleEnd(false);
-    }, 2000);
+      onRoundComplete({ playerHealth: newPlayerHealth, pointsEarned: 0 });
+    }, 1500);
+  };
+
+  // Handle per-question 15s timeout
+  const handleQuestionTimeout = () => {
+    if (showFeedback || waitingNext) return;
+    setShowFeedback('timeout');
+    // Timeout penalty: deduct 25% from player health
+    const newPlayerHealth = Math.max(0, playerHealthRef.current - 25);
+    playerHealthRef.current = newPlayerHealth;
+    setPlayerHealth(newPlayerHealth);
+    setPointsEarned(0);
+    // ensure overall timer continues but end this battle round
+    setTimeout(() => {
+      onRoundComplete({ playerHealth: newPlayerHealth, pointsEarned: 0 });
+    }, 1200);
   };
 
   // Handle battle end
-  const handleBattleEnd = (victory) => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
+  const handleBattleEnd = (victory, overrides = {}) => {
+    // Do not stop the overall timer here; keep the battle session running so
+    // the modal can show the updated HP and immediately load the next question.
 
     const battleResult = {
       victory,
-      isCriticalHit,
-      incorrectAttempts,
+      // prefer an explicit override for critical hit (avoid async state timing issues)
+      isCriticalHit: typeof overrides.isCriticalHit === 'boolean' ? overrides.isCriticalHit : isCriticalHit,
       timeRemaining,
-      playerHealth,
-      monsterHealth
+      playerHealth: typeof overrides.playerHealth === 'number' ? overrides.playerHealth : playerHealth,
+      monsterHealth: typeof overrides.monsterHealth === 'number' ? overrides.monsterHealth : monsterHealth,
+      pointsEarned: typeof overrides.pointsEarned === 'number' ? overrides.pointsEarned : pointsEarned
     };
 
     if (onBattleEnd) {
       onBattleEnd(battleResult);
     }
 
-    // Reset state
-    resetBattle();
+    // Stop timers and present result overlay so user sees victory/defeat
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (questionTimeoutRef.current) {
+      clearTimeout(questionTimeoutRef.current);
+      questionTimeoutRef.current = null;
+    }
+
+    // mark answered so UI disables further choices
+    setIsAnswered(true);
+    setRoundResult(battleResult);
+
+    // Fire-and-forget: try to record round to Supabase
+    recordRoundToSupabase(battleResult);
   };
 
-  // Reset battle state
+  // Called when a round completes (answer/timeout). Decides whether this ends the battle or allows next question.
+  const onRoundComplete = (overrides = {}) => {
+    const currentPlayerHealth = typeof overrides.playerHealth === 'number' ? overrides.playerHealth : playerHealthRef.current;
+    const currentMonsterHealth = typeof overrides.monsterHealth === 'number' ? overrides.monsterHealth : monsterHealthRef.current;
+
+    // If either side reached 0, finalize battle
+    if (currentPlayerHealth <= 0 || currentMonsterHealth <= 0) {
+      const victory = currentMonsterHealth <= 0 && currentPlayerHealth > 0;
+      handleBattleEnd(victory, overrides);
+      return;
+    }
+
+    // Not a terminal round: allow player to proceed to next question
+    setWaitingNext(true);
+    setIsAnswered(false);
+    // Keep timers running (overall timer is continuous)
+    if (onBattleEnd) {
+      // provide a snapshot of current healths
+      onBattleEnd({
+        victory: false,
+        isCriticalHit: typeof overrides.isCriticalHit === 'boolean' ? overrides.isCriticalHit : false,
+        timeRemaining,
+        playerHealth: currentPlayerHealth,
+        monsterHealth: currentMonsterHealth,
+        pointsEarned: typeof overrides.pointsEarned === 'number' ? overrides.pointsEarned : 0
+      });
+    }
+  };
+
   const resetBattle = () => {
     setQuestion(null);
     setOptions([]);
     setSelectedAnswer(null);
     setTimeRemaining(60);
-    setPlayerHealth(100);
-    setMonsterHealth(100);
-    setIncorrectAttempts(0);
+    // Do NOT reset player/monster HP here so damage persists across rounds
     setIsAnswered(false);
     setIsCriticalHit(false);
     setBattleStartTime(null);
     setTimeDeducted(0);
+    setPointsEarned(0);
     setShowFeedback(null);
     questionStartTimeRef.current = null;
-    
+    if (questionTimeoutRef.current) {
+      clearTimeout(questionTimeoutRef.current);
+      questionTimeoutRef.current = null;
+    }
+
     if (timerRef.current) {
       clearInterval(timerRef.current);
+      timerRef.current = null;
     }
   };
 
-  // Handle modal close
+  // Handle modal close (removed Close button in UI — keep for parent cleanup)
   const handleClose = () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
+      timerRef.current = null;
     }
     resetBattle();
     if (onClose) {
@@ -279,6 +459,13 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
           '--ui-tile-feedback': `url(${uiTiles.accent})`,
         }}
       >
+        {/* Decorative tiled art layers from UI pack */}
+        <div className="modal-bg-art" style={{
+          backgroundImage: `url(${uiTiles.bgVariant2})`,
+        }} />
+        <div className="modal-bg-decor" style={{
+          backgroundImage: `url(${uiTiles.ornament1})`,
+        }} />
         {/* Modal Content Wrapper */}
         <div className="battle-modal-content">
           {/* Header */}
@@ -342,13 +529,7 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
           )}
         </div>
 
-        {/* Incorrect Attempts Counter */}
-        <div className="attempts-counter">
-          <span>Wrong Answers: </span>
-          <span className={`attempts-value ${incorrectAttempts >= 3 ? 'max-attempts' : ''}`}>
-            {incorrectAttempts}/3
-          </span>
-        </div>
+        {/* Attempts counter removed per updated rules */}
 
         {/* Question Section */}
         <div className="question-section">
@@ -358,7 +539,18 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
               <div className="question-text">{question.question}</div>
               
               <div className="options-container">
-                {options.map((option, index) => {
+                {(() => {
+                  // Ensure we always render options even if options[] is empty (derive from question)
+                  const displayedOptions = (options && options.length > 0) ? options : (
+                    question ? [
+                      question.correct_answer,
+                      question.wrong_answer_1,
+                      question.wrong_answer_2,
+                      question.wrong_answer_3
+                    ].filter(Boolean) : []
+                  );
+
+                  return displayedOptions.map((option, index) => {
                   const isSelected = selectedAnswer === option;
                   const isCorrect = option === question.correct_answer;
                   let optionClass = 'option-button';
@@ -374,21 +566,22 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
                       key={index}
                       className={optionClass}
                       onClick={() => handleAnswerSelect(option)}
-                      disabled={isAnswered}
+                      disabled={!!showFeedback || waitingNext}
                     >
                       {option}
                     </button>
                   );
-                })}
+                  });
+                })()}
               </div>
 
-              {/* Feedback Messages */}
+                    {/* Feedback Messages */}
               {showFeedback === 'correct' && (
                 <div className="feedback-message correct-feedback">
                   {isCriticalHit ? (
                     <>
                       <span className="critical-hit">🎯 CRITICAL HIT!</span>
-                      <span>You answered correctly within 10 seconds!</span>
+                      <span>You answered correctly within 15 seconds!</span>
                     </>
                   ) : (
                     <span>✓ Correct Answer!</span>
@@ -398,13 +591,27 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
 
               {showFeedback === 'incorrect' && (
                 <div className="feedback-message incorrect-feedback">
-                  ✗ Wrong Answer! -5 seconds penalty
+                  ✗ Wrong Answer! -25% HP penalty
                 </div>
               )}
 
               {showFeedback === 'timeout' && (
                 <div className="feedback-message timeout-feedback">
                   ⏰ Time's Up! The monster attacks!
+                </div>
+              )}
+              {/* Next Question control for non-terminal rounds */}
+              {waitingNext && (
+                <div style={{marginTop:12}}>
+                  <button className="btn" onClick={() => {
+                    // prepare for next question; keep HP values
+                    setWaitingNext(false);
+                    setSelectedAnswer(null);
+                    setShowFeedback(null);
+                    // new question start time
+                    questionStartTimeRef.current = Date.now();
+                    fetchQuestion();
+                  }}>Next Question</button>
                 </div>
               )}
             </>
@@ -414,13 +621,39 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
         </div>
 
         </div>
-        
-        {/* Close Button - Fixed at bottom */}
-        <div className="close-button-wrapper">
-          <button className="close-battle-button" onClick={handleClose}>
-            Close Battle
-          </button>
-        </div>
+
+        {/* Victory/Defeat Overlay: appears when a side reaches 0% */}
+        {roundResult && (
+          <div className="battle-result-overlay" style={{padding:'1.5rem', background:'rgba(0,0,0,0.85)', borderTop:'3px solid rgba(255,255,255,0.04)'}}>
+            <h3 style={{margin:0, color: roundResult.victory ? '#7fff8f' : '#ff8b8b'}}>{roundResult.victory ? '🎉 Victory!' : '💀 Defeat!'}</h3>
+            <div style={{marginTop:8, color:'#cfeffb'}}>Critical Hit: <strong>{roundResult.isCriticalHit ? 'Yes' : 'No'}</strong></div>
+            <div style={{marginTop:6}}>Points Earned: <strong>{roundResult.pointsEarned || 0}</strong></div>
+            <div style={{marginTop:6}}>Player Health: <strong>{roundResult.playerHealth}%</strong></div>
+            <div style={{marginTop:6}}>Monster Health: <strong>{roundResult.monsterHealth}%</strong></div>
+
+            <div style={{marginTop:12, display:'flex', gap:8}}>
+              <button
+                className="btn"
+                onClick={() => {
+                  // Start next battle: reset HP and clear roundResult
+                  setPlayerHealth(100);
+                  setMonsterHealth(100);
+                  playerHealthRef.current = 100;
+                  monsterHealthRef.current = 100;
+                  setPointsEarned(0);
+                  setIsCriticalHit(false);
+                  setRoundResult(null);
+                  setIsAnswered(false);
+                  setTimeRemaining(60);
+                  // start next question
+                  fetchQuestion();
+                }}
+              >
+                Next Battle
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

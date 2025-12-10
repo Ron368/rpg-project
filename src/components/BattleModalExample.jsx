@@ -3,9 +3,9 @@ import BattleModal from './BattleModal';
 import { uiTiles } from '../utils/uiAssets';
 import './BattleModal.css';
 
-/**
- * Example component demonstrating how to use the BattleModal
- * This can be integrated into your game when a player encounters a monster
+/*
+  Example component demonstrating how to use the BattleModal
+  This can be integrated into your game when a player encounters a monster
  */
 const BattleModalExample = () => {
   const [isBattleOpen, setIsBattleOpen] = useState(false);
@@ -27,7 +27,7 @@ const BattleModalExample = () => {
   const handleBattleEnd = (result) => {
     console.log('Battle ended:', result);
     setBattleResult(result);
-    setIsBattleOpen(false);
+    // keep modal open so the battle can continue; result summary updated above
   };
 
   // Handle modal close
@@ -37,7 +37,7 @@ const BattleModalExample = () => {
 
   return (
     <>
-      <h2 style={{ color: '#00d4ff', marginBottom: '1rem' }}>⚔️ Battle Modal Example ⚔️</h2>
+      <h2 style={{ color: '#00d4ff', marginBottom: '1rem' }}>⚔️ Battle Modal ⚔️</h2>
       <p style={{ marginBottom: '1rem', fontSize: '1.05rem' }}>Click the button below to start a battle!</p>
 
       <button
@@ -90,10 +90,14 @@ const BattleModalExample = () => {
         <div className={`battle-result ${battleResult.victory ? 'victory' : 'defeat'}`}>
           <h3>{battleResult.victory ? '🎉 Victory!' : '💀 Defeat!'}</h3>
           <div className="result-line">Critical Hit: <span className="result-small">{battleResult.isCriticalHit ? 'Yes' : 'No'}</span></div>
-          <div className="result-line">Wrong Answers: <span className="result-small">{battleResult.incorrectAttempts}</span></div>
+          <div className="result-line">Points Earned: <span className="result-small">{battleResult.pointsEarned || 0}</span></div>
+          <div className="result-line">Total Points: <span className="result-small">{localStorage.getItem('syntax-slayer-points') || 0}</span></div>
           <div className="result-line">Time Remaining: <span className="result-small">{battleResult.timeRemaining}s</span></div>
           <div className="result-line">Player Health: <span className="result-small">{battleResult.playerHealth}%</span></div>
           <div className="result-line">Monster Health: <span className="result-small">{battleResult.monsterHealth}%</span></div>
+          <div style={{marginTop:'0.6rem'}}>
+            <a href="/leaderboard.html" target="_blank" rel="noreferrer" style={{color:'#fff', background:'#002a3a', padding:'0.5rem 0.8rem', textDecoration:'none', borderRadius:4}}>Open Leaderboard</a>
+          </div>
         </div>
       )}
     </>
