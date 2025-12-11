@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { testSupabaseConnection } from './services/supabaseClient';
 import BattleModalExample from './components/BattleModalExample';
+import GameCanvas from './components/GameCanvas';
 import { uiTiles } from './utils/uiAssets';
 import './App.css';
 
@@ -40,6 +41,11 @@ function App() {
         {/* Battle Modal Example (inline to keep single-section layout) */}
         <div className="battle-inline">
           <BattleModalExample />
+        </div>
+
+        {/* Add Phaser canvas under the battle example */}
+        <div style={{ marginTop: '32px' }}>
+          <GameCanvas />
         </div>
       </div>
     </div>
