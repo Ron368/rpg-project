@@ -68,24 +68,35 @@ export default class DungeonScene extends Phaser.Scene {
   }
 
   create() {
-    // Map + tileset
+    // Create map + tileset (reads spacing/margin from TMJ)
     const map = this.make.tilemap({ key: 'dungeon-level-1' })
     const ts = map.tilesets[0]
     const tileset = map.addTilesetImage(ts.name, 'tiles', ts.tileWidth, ts.tileHeight, ts.margin || 0, ts.spacing || 1)
-    const groundLayer = map.createLayer('Dungeon', tileset, 0, 0)
-    groundLayer.setCollisionByExclusion([-1], true)
 
+    // Layers
+    const dungeonLayer = map.createLayer('Dungeon', tileset, 0, 0)   // floor (non-collidable)
+    const wallLayer    = map.createLayer('Wall', tileset, 0, 0)      // walls
+    const cartsLayer   = map.createLayer('Carts', tileset, 0, 0)     // obstacles
+    const objectsLayer = map.createLayer('Objects', tileset, 0, 0)   // obstacles
+
+    // Set collisions based on tile property in Tiled
+    wallLayer.setCollisionByProperty({ collides: true })
+    // Ensure other layers do NOT collide
+    dungeonLayer.setCollisionByProperty({ collides: false })
+    cartsLayer.setCollisionByProperty({ collides: true })
+    objectsLayer.setCollisionByProperty({ collides: true })
+
+    // World/camera bounds
     this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels)
     this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels)
     this.cameras.main.roundPixels = true
 
-    // Player (real spritesheet)
+    // Player
     this.player = this.physics.add.sprite(50, 50, 'player', 0).setOrigin(0.5, 0.5)
-    // Scale up the knight visually (keeps crisp pixels)
     this.player.setScale(PLAYER_DISPLAY_SCALE)
     this.player.setCollideWorldBounds(true)
-    // Keep a 16x16 hitbox so movement against 16px tiles feels right
-    this.player.body.setSize(16, 16, true)
+    this.player.body.setSize(8, 8, true)
+    this.player.body.setOffset(26, 38)
     this.player.setDepth(10)
 
     // Player animations (0-based indices)
@@ -105,10 +116,20 @@ export default class DungeonScene extends Phaser.Scene {
       console.error('[DungeonScene] Player texture not found; check src/assets/player or src/assets/characters/player')
     }
 
-    this.physics.add.collider(this.player, groundLayer)
+    // Colliders: player vs Wall only
+    this.physics.add.collider(this.player, wallLayer)
+    this.physics.add.collider(this.player, cartsLayer)
+    this.physics.add.collider(this.player, objectsLayer)
+    // Optional floor collider:
+    // this.physics.add.collider(this.player, dungeonLayer)
+    wallLayer.setCollisionByExclusion([-1]) // ensure all non-empty tiles collide
+    cartsLayer.setCollisionByExclusion([-1])
+    objectsLayer.setCollisionByExclusion([-1])
+
+    // Follow player
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
 
-    // Build only the RUN animation using frames 0..5
+    // Rat: use run sheet
     if (this.textures.exists('rat_run') && !this.anims.exists('rat-walk')) {
       this.anims.create({
         key: 'rat-walk',
@@ -118,36 +139,27 @@ export default class DungeonScene extends Phaser.Scene {
       })
     }
 
-    // Create Rat sprite using the run sheet and start patrol
     this.monster = this.physics.add.sprite(300, 300, 'rat_run', 0).setOrigin(0.5, 0.5)
     this.monster.setScale(0.85)
     this.monster.setCollideWorldBounds(true)
-    // Use a compact collider to reduce snagging on corners
     this.monster.body.setSize(16, 12, true)
-    this.monster.body.setOffset(24, 40) // center inside 64x64 frame; tweak if needed
+    this.monster.body.setOffset(24, 40)
     this.monster.setDepth(9)
 
-    // Start patrol to the left
+    // Colliders: rat vs obstacle layers
+    this.physics.add.collider(this.monster, wallLayer, () => this.handleRatBounce())
+    this.physics.add.collider(this.monster, cartsLayer, () => this.handleRatBounce())
+    this.physics.add.collider(this.monster, objectsLayer, () => this.handleRatBounce())
+    // Optional floor collider:
+    // this.physics.add.collider(this.monster, dungeonLayer, () => this.handleRatBounce())
+
+    // Patrol start
     this.patrolDir = -1
     this.monster.setVelocityX(RAT_SPEED * this.patrolDir)
     this.monster.play('rat-walk', true)
-    // Face rule: flip when moving left if base frames face RIGHT
     this.monster.setFlipX(RAT_FACES_RIGHT ? (this.patrolDir < 0) : (this.patrolDir > 0))
 
-    // Collider with layer: reverse on impact and nudge away to avoid sticking
-    this.physics.add.collider(this.monster, groundLayer, () => {
-      // Reverse direction
-      this.patrolDir *= -1
-      this.monster.setVelocityX(RAT_SPEED * this.patrolDir)
-      // Nudge slightly away from the wall to prevent “stuck” body overlap
-      this.monster.x += this.patrolDir * 2
-      // Re-apply facing on direction change
-      this.monster.setFlipX(RAT_FACES_RIGHT ? (this.patrolDir < 0) : (this.patrolDir > 0))
-      // Ensure walk anim is playing
-      this.monster.play('rat-walk', true)
-    })
-
-    // Player <-> Monster battle trigger
+    // Battle trigger
     this.physics.add.overlap(this.player, this.monster, () => this.onPlayerMonsterCollision(), null, this)
 
     // Input
@@ -158,12 +170,21 @@ export default class DungeonScene extends Phaser.Scene {
       right: Phaser.Input.Keyboard.KeyCodes.D
     })
 
-    // Zoom to fit
+    // Fit
     const W = this.scale.width
     const H = this.scale.height
     const z = Math.min(W / map.widthInPixels, H / map.heightInPixels)
     this.cameras.main.setZoom(z)
     this.cameras.main.centerOn(map.widthInPixels / 2, map.heightInPixels / 2)
+  }
+
+  // Helper: reverse rat when hitting walls/obstacles
+  handleRatBounce() {
+    this.patrolDir *= -1
+    this.monster.setVelocityX(RAT_SPEED * this.patrolDir)
+    this.monster.x += this.patrolDir * 2
+    this.monster.setFlipX(RAT_FACES_RIGHT ? (this.patrolDir < 0) : (this.patrolDir > 0))
+    if (this.anims.exists('rat-walk')) this.monster.play('rat-walk', true)
   }
 
   update() {
