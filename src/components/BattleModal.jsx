@@ -3,7 +3,9 @@ import { supabase } from '../services/supabaseClient';
 import { uiTiles } from '../utils/uiAssets';
 import './BattleModal.css';
 
-const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
+const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) => {
+  if (!isOpen) return null;
+
   const [question, setQuestion] = useState(null);
   const [options, setOptions] = useState([]);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -93,14 +95,17 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
   // Fetch a random question from Supabase
   const fetchQuestion = async () => {
     try {
-      const { data, error } = await supabase
-        .from('questions')
-        .select('*')
-        .limit(100); // Fetch multiple to randomize
+      let query = supabase.from('questions').select('*').limit(100)
 
-      // If there's an error OR no rows returned, use fallback
+      // If your DB stores difficulty as: easy/medium/hard
+      if (difficulty) {
+        query = query.eq('difficulty', String(difficulty).toUpperCase())
+      }
+
+      const { data, error } = await query
+
       if (error || !data || data.length === 0) {
-        if (error) console.error('Error fetching question:', error);
+        if (error) console.error('Error fetching question:', error)
         // Fallback question for testing
         const fallback = {
           id: 1,
@@ -373,18 +378,8 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
     // Not a terminal round: allow player to proceed to next question
     setWaitingNext(true);
     setIsAnswered(false);
-    // Keep timers running (overall timer is continuous)
-    if (onBattleEnd) {
-      // provide a snapshot of current healths
-      onBattleEnd({
-        victory: false,
-        isCriticalHit: typeof overrides.isCriticalHit === 'boolean' ? overrides.isCriticalHit : false,
-        timeRemaining,
-        playerHealth: currentPlayerHealth,
-        monsterHealth: currentMonsterHealth,
-        pointsEarned: typeof overrides.pointsEarned === 'number' ? overrides.pointsEarned : 0
-      });
-    }
+
+    // IMPORTANT: do NOT call onBattleEnd here anymore
   };
 
   const resetBattle = () => {
@@ -430,8 +425,6 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const getTimerColor = () => {
     if (timeRemaining <= 10) return '#ff4444';
     if (timeRemaining <= 20) return '#ffaa00';
@@ -444,10 +437,17 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
     return '#ff4444';
   };
 
+  // NEW: auto-hide feedback overlay after a short duration
+  useEffect(() => {
+    if (!showFeedback) return;
+    const t = setTimeout(() => setShowFeedback(null), 1400);
+    return () => clearTimeout(t);
+  }, [showFeedback]);
+
   return (
     <div className="battle-modal-overlay" onClick={handleClose}>
-      <div 
-        className="battle-modal" 
+      <div
+        className="battle-modal"
         onClick={(e) => e.stopPropagation()}
         style={{
           '--ui-tile-bg': `url(${uiTiles.backgroundPattern2})`,
@@ -460,178 +460,207 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData }) => {
         }}
       >
         {/* Decorative tiled art layers from UI pack */}
-        <div className="modal-bg-art" style={{
-          backgroundImage: `url(${uiTiles.bgVariant2})`,
-        }} />
-        <div className="modal-bg-decor" style={{
-          backgroundImage: `url(${uiTiles.ornament1})`,
-        }} />
+        <div
+          className="modal-bg-art"
+          style={{ backgroundImage: `url(${uiTiles.bgVariant2})` }}
+        />
+        <div
+          className="modal-bg-decor"
+          style={{ backgroundImage: `url(${uiTiles.ornament1})` }}
+        />
+
         {/* Modal Content Wrapper */}
         <div className="battle-modal-content">
           {/* Header */}
           <div className="battle-header">
-          <div className="header-decoration-left"></div>
-          <div className="header-content">
-            <h2 className="battle-title">⚔️ BATTLE MODE ⚔️</h2>
-            {monsterData && (
-              <div className="monster-name">{monsterData.name || 'BUG MONSTER'}</div>
-            )}
-          </div>
-          <div className="header-decoration-right"></div>
-        </div>
+            <div className="header-decoration-left"></div>
 
-        {/* Health Bars */}
-        <div className="health-bars-container">
-          <div className="health-bar-section">
-            <div className="health-label">
-              <span>Player</span>
-              <span className="health-value">{playerHealth}%</span>
+            <div className="header-content">
+              <h2 className="battle-title">⚔️ BATTLE MODE ⚔️</h2>
+              {monsterData && (
+                <div className="monster-name">{monsterData.name || 'BUG MONSTER'}</div>
+              )}
             </div>
-            <div className="health-bar-wrapper">
-              <div 
-                className="health-bar player-health"
-                style={{
-                  width: `${playerHealth}%`,
-                  backgroundColor: getHealthBarColor(playerHealth)
-                }}
-              />
-            </div>
-          </div>
 
-          <div className="health-bar-section">
-            <div className="health-label">
-              <span>Monster</span>
-              <span className="health-value">{monsterHealth}%</span>
-            </div>
-            <div className="health-bar-wrapper">
-              <div 
-                className="health-bar monster-health"
-                style={{
-                  width: `${monsterHealth}%`,
-                  backgroundColor: getHealthBarColor(monsterHealth)
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Timer */}
-        <div className="timer-container">
-          <div className="timer-label">Time Remaining</div>
-          <div 
-            className="timer-display"
-            style={{ color: getTimerColor() }}
-          >
-            {timeRemaining}s
-          </div>
-          {timeDeducted > 0 && (
-            <div className="time-penalty">-{timeDeducted}s penalty</div>
-          )}
-        </div>
-
-        {/* Attempts counter removed per updated rules */}
-
-        {/* Question Section */}
-        <div className="question-section">
-          {question ? (
-            <>
-              <div className="question-label">QUESTION:</div>
-              <div className="question-text">{question.question}</div>
-              
-              <div className="options-container">
-                {(() => {
-                  // Ensure we always render options even if options[] is empty (derive from question)
-                  const displayedOptions = (options && options.length > 0) ? options : (
-                    question ? [
-                      question.correct_answer,
-                      question.wrong_answer_1,
-                      question.wrong_answer_2,
-                      question.wrong_answer_3
-                    ].filter(Boolean) : []
-                  );
-
-                  return displayedOptions.map((option, index) => {
-                  const isSelected = selectedAnswer === option;
-                  const isCorrect = option === question.correct_answer;
-                  let optionClass = 'option-button';
-                  
-                  if (isAnswered && isSelected) {
-                    optionClass += isCorrect ? ' correct' : ' incorrect';
-                  } else if (isSelected && !isAnswered) {
-                    optionClass += ' selected';
-                  }
-
-                  return (
-                    <button
-                      key={index}
-                      className={optionClass}
-                      onClick={() => handleAnswerSelect(option)}
-                      disabled={!!showFeedback || waitingNext}
-                    >
-                      {option}
-                    </button>
-                  );
-                  });
-                })()}
+            {/* NEW: right side = timer + right decoration */}
+            <div className="battle-header-right">
+              <div className="battle-header-timer" aria-label="Time Remaining">
+                <div className="battle-header-timer-label">TIME</div>
+                <div
+                  className="battle-header-timer-value"
+                  style={{ color: getTimerColor() }}
+                >
+                  {timeRemaining}s
+                </div>
               </div>
 
-                    {/* Feedback Messages */}
-              {showFeedback === 'correct' && (
-                <div className="feedback-message correct-feedback">
-                  {isCriticalHit ? (
-                    <>
-                      <span className="critical-hit">🎯 CRITICAL HIT!</span>
-                      <span>You answered correctly within 15 seconds!</span>
-                    </>
-                  ) : (
-                    <span>✓ Correct Answer!</span>
-                  )}
+              <div className="header-decoration-right"></div>
+            </div>
+          </div>
+
+          {/* NEW: Two-column layout */}
+          <div className="battle-layout">
+            {/* Left column: health */}
+            <aside className="battle-sidebar">
+              {/* Health Bars */}
+              <div className="health-bars-container">
+                <div className="health-bar-section">
+                  <div className="health-label">
+                    <span>Player</span>
+                    <span className="health-value">{playerHealth}%</span>
+                  </div>
+                  <div className="health-bar-wrapper">
+                    <div
+                      className="health-bar player-health"
+                      style={{
+                        width: `${playerHealth}%`,
+                        backgroundColor: getHealthBarColor(playerHealth),
+                      }}
+                    />
+                  </div>
                 </div>
+
+                <div className="health-bar-section">
+                  <div className="health-label">
+                    <span>Monster</span>
+                    <span className="health-value">{monsterHealth}%</span>
+                  </div>
+                  <div className="health-bar-wrapper">
+                    <div
+                      className="health-bar monster-health"
+                      style={{
+                        width: `${monsterHealth}%`,
+                        backgroundColor: getHealthBarColor(monsterHealth),
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            {/* Right column: question + options + feedback */}
+            <section className="battle-question-pane">
+              {/* Question Section */}
+              <div className="question-section">
+                {question ? (
+                  <>
+                    <div className="question-label">QUESTION:</div>
+                    <div className="question-text">{question.question}</div>
+
+                    <div className="options-container">
+                      {(() => {
+                        const displayedOptions =
+                          options && options.length > 0
+                            ? options
+                            : question
+                              ? [
+                                  question.correct_answer,
+                                  question.wrong_answer_1,
+                                  question.wrong_answer_2,
+                                  question.wrong_answer_3,
+                                ].filter(Boolean)
+                              : [];
+
+                        return displayedOptions.map((option, index) => {
+                          const isSelected = selectedAnswer === option;
+                          const isCorrect = option === question.correct_answer;
+                          let optionClass = 'option-button';
+
+                          if (isAnswered && isSelected) {
+                            optionClass += isCorrect ? ' correct' : ' incorrect';
+                          } else if (isSelected && !isAnswered) {
+                            optionClass += ' selected';
+                          }
+
+                          return (
+                            <button
+                              key={index}
+                              className={optionClass}
+                              onClick={() => handleAnswerSelect(option)}
+                              disabled={!!showFeedback || waitingNext}
+                            >
+                              {option}
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                    
+                    {/* Next Question control for non-terminal rounds */}
+                    {waitingNext && (
+                      <div style={{ marginTop: 12 }}>
+                        <button
+                          className="btn"
+                          onClick={() => {
+                            setWaitingNext(false);
+                            setSelectedAnswer(null);
+                            setShowFeedback(null);
+                            questionStartTimeRef.current = Date.now();
+                            fetchQuestion();
+                          }}
+                        >
+                          Next Question
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="loading-question">Loading question...</div>
+                )}
+              </div>
+            </section>
+          </div>
+        </div>
+
+        {/* NEW: Center-screen feedback overlay */}
+        {showFeedback && !roundResult && (
+          <div className="battle-feedback-overlay" aria-live="polite" aria-atomic="true">
+            <div className={`battle-feedback-pop ${showFeedback}`}>
+              {showFeedback === 'correct' && (
+                isCriticalHit ? (
+                  <>
+                    <span className="critical-hit">🎯 CRITICAL HIT!</span>
+                    <div className="battle-feedback-sub">You answered correctly within 15 seconds!</div>
+                  </>
+                ) : (
+                  <div className="battle-feedback-title">✓ Correct!</div>
+                )
               )}
 
               {showFeedback === 'incorrect' && (
-                <div className="feedback-message incorrect-feedback">
-                  ✗ Wrong Answer! -25% HP penalty
-                </div>
+                <>
+                  <div className="battle-feedback-title">✗ Wrong Answer!</div>
+                  <div className="battle-feedback-sub">-25% HP penalty</div>
+                </>
               )}
 
               {showFeedback === 'timeout' && (
-                <div className="feedback-message timeout-feedback">
-                  ⏰ Time's Up! The monster attacks!
-                </div>
+                <>
+                  <div className="battle-feedback-title">⏰ Time&apos;s Up!</div>
+                  <div className="battle-feedback-sub">The monster attacks!</div>
+                </>
               )}
-              {/* Next Question control for non-terminal rounds */}
-              {waitingNext && (
-                <div style={{marginTop:12}}>
-                  <button className="btn" onClick={() => {
-                    // prepare for next question; keep HP values
-                    setWaitingNext(false);
-                    setSelectedAnswer(null);
-                    setShowFeedback(null);
-                    // new question start time
-                    questionStartTimeRef.current = Date.now();
-                    fetchQuestion();
-                  }}>Next Question</button>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="loading-question">Loading question...</div>
-          )}
-        </div>
-
-        </div>
+            </div>
+          </div>
+        )}
 
         {/* Victory/Defeat Overlay: appears when a side reaches 0% */}
         {roundResult && (
-          <div className="battle-result-overlay" style={{padding:'1.5rem', background:'rgba(0,0,0,0.85)', borderTop:'3px solid rgba(255,255,255,0.04)'}}>
-            <h3 style={{margin:0, color: roundResult.victory ? '#7fff8f' : '#ff8b8b'}}>{roundResult.victory ? '🎉 Victory!' : '💀 Defeat!'}</h3>
-            <div style={{marginTop:8, color:'#cfeffb'}}>Critical Hit: <strong>{roundResult.isCriticalHit ? 'Yes' : 'No'}</strong></div>
-            <div style={{marginTop:6}}>Points Earned: <strong>{roundResult.pointsEarned || 0}</strong></div>
-            <div style={{marginTop:6}}>Player Health: <strong>{roundResult.playerHealth}%</strong></div>
-            <div style={{marginTop:6}}>Monster Health: <strong>{roundResult.monsterHealth}%</strong></div>
+          <div
+            className="battle-result-overlay"
+            style={{
+              padding: '1.5rem',
+              background: 'rgba(0,0,0,0.85)',
+              borderTop: '3px solid rgba(255,255,255,0.04)',
+            }}
+          >
+            <h3 style={{ margin: 0, color: roundResult.victory ? '#7fff8f' : '#ff8b8b' }}>{roundResult.victory ? '🎉 Victory!' : '💀 Defeat!'}</h3>
+            <div style={{ marginTop: 8, color: '#cfeffb' }}>Critical Hit: <strong>{roundResult.isCriticalHit ? 'Yes' : 'No'}</strong></div>
+            <div style={{ marginTop: 6 }}>Points Earned: <strong>{roundResult.pointsEarned || 0}</strong></div>
+            <div style={{ marginTop: 6 }}>Player Health: <strong>{roundResult.playerHealth}%</strong></div>
+            <div style={{ marginTop: 6 }}>Monster Health: <strong>{roundResult.monsterHealth}%</strong></div>
 
-            <div style={{marginTop:12, display:'flex', gap:8}}>
+            <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
               <button
                 className="btn"
                 onClick={() => {

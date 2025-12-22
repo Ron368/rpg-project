@@ -5,7 +5,7 @@ import DungeonScene from './scenes/DungeonScene'
 export const gameConfig = {
   type: Phaser.AUTO,
   width: 800,
-  height: 600,
+  height: 500,
   pixelArt: true,
   physics: { default: 'arcade', arcade: { debug: false } },
   render: { pixelArt: true, antialias: false, roundPixels: true },

@@ -27,7 +27,11 @@ export default class DungeonScene extends Phaser.Scene {
 
     this.ratFrameKeys = []
 
-    this.lastFacingLeft = false; // remember last horizontal facing
+    this.lastFacingLeft = false
+
+    // battle gate / cooldown so overlap doesn't re-trigger instantly
+    this.inBattle = false
+    this.battleCooldownUntil = 0
   }
 
   preload() {
@@ -81,7 +85,6 @@ export default class DungeonScene extends Phaser.Scene {
 
     // Set collisions based on tile property in Tiled
     wallLayer.setCollisionByProperty({ collides: true })
-    // Ensure other layers do NOT collide
     dungeonLayer.setCollisionByProperty({ collides: false })
     cartsLayer.setCollisionByProperty({ collides: true })
     objectsLayer.setCollisionByProperty({ collides: true })
@@ -100,8 +103,6 @@ export default class DungeonScene extends Phaser.Scene {
     this.player.setDepth(10)
 
     // Player animations (0-based indices)
-    // idle: 0..4, run: 5..12, jump: 13..15, fall: 16..17,
-    // attack: 18..23, damage: 24, dead: 25..31, block: 32..33
     if (this.textures.exists('player')) {
       this.anims.create({ key: 'player-idle',   frames: this.anims.generateFrameNumbers('player', { start: 0,  end: 4  }), frameRate: 6,  repeat: -1 })
       this.anims.create({ key: 'player-run',    frames: this.anims.generateFrameNumbers('player', { start: 8,  end: 15 }), frameRate: 10, repeat: -1 })
@@ -120,14 +121,23 @@ export default class DungeonScene extends Phaser.Scene {
     this.physics.add.collider(this.player, wallLayer)
     this.physics.add.collider(this.player, cartsLayer)
     this.physics.add.collider(this.player, objectsLayer)
-    // Optional floor collider:
-    // this.physics.add.collider(this.player, dungeonLayer)
-    wallLayer.setCollisionByExclusion([-1]) // ensure all non-empty tiles collide
+    
+    wallLayer.setCollisionByExclusion([-1]) 
     cartsLayer.setCollisionByExclusion([-1])
     objectsLayer.setCollisionByExclusion([-1])
 
-    // Follow player
-    this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
+    // Show the whole map (fixed camera)
+    const cam = this.cameras.main
+    cam.stopFollow()
+
+    const W = this.scale.width
+    const H = this.scale.height
+    const z = Math.min(W / map.widthInPixels, H / map.heightInPixels) // contain (whole map visible)
+    cam.setZoom(z)
+    cam.centerOn(map.widthInPixels / 2, map.heightInPixels / 2)
+
+    // Optional: prevent black bars from looking “black”
+    cam.setBackgroundColor('#1a1a2e')
 
     // Rat: use run sheet
     if (this.textures.exists('rat_run') && !this.anims.exists('rat-walk')) {
@@ -169,13 +179,6 @@ export default class DungeonScene extends Phaser.Scene {
       down: Phaser.Input.Keyboard.KeyCodes.S,
       right: Phaser.Input.Keyboard.KeyCodes.D
     })
-
-    // Fit
-    const W = this.scale.width
-    const H = this.scale.height
-    const z = Math.min(W / map.widthInPixels, H / map.heightInPixels)
-    this.cameras.main.setZoom(z)
-    this.cameras.main.centerOn(map.widthInPixels / 2, map.heightInPixels / 2)
   }
 
   // Helper: reverse rat when hitting walls/obstacles
@@ -226,19 +229,43 @@ export default class DungeonScene extends Phaser.Scene {
     }
   }
 
+  resolveBattle({ victory }) {
+    // Called by React when battle ends
+    if (victory && this.monster) {
+      this.monster.destroy()
+      this.monster = null
+    }
+
+    this.inBattle = false
+    this.battleCooldownUntil = Date.now() + 500
+
+    // Resume gameplay
+    this.scene.resume()
+    this.physics.resume()
+  }
+
   onPlayerMonsterCollision() {
-    console.log('Collision detected. Starting battle.')
+    if (this.inBattle) return
+    if (Date.now() < this.battleCooldownUntil) return
+    if (!this.monster) return
+
+    this.inBattle = true
+
+    // Freeze everything while modal is open
+    this.player.setVelocity(0, 0)
+    this.monster.setVelocity(0, 0)
 
     this.physics.pause()
     this.scene.pause()
 
+    // Rat => easy questions
     if (this.reactAPI && typeof this.reactAPI.showBattleModal === 'function') {
-      this.reactAPI.showBattleModal({ monsterId: 1, playerHP: 100 })
-    }
-
-    if (this.monster) {
-      this.monster.destroy()
-      this.monster = null
+      this.reactAPI.showBattleModal({
+        monsterId: 1,
+        monsterType: 'rat',
+        name: 'Rat',
+        difficulty: 'EASY',
+      })
     }
   }
 }
