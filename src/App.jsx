@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { testSupabaseConnection } from './services/supabaseClient';
-import BattleModalExample from './components/BattleModalExample';
 import GameCanvas from './components/GameCanvas';
+import BattleModal from './components/BattleModal';
 import { uiTiles } from './utils/uiAssets';
 import './App.css';
 
@@ -12,11 +12,43 @@ function App() {
     testSupabaseConnection();
   }, []);
 
+  const gameRef = useRef(null);
+
+  const [battleOpen, setBattleOpen] = useState(false);
+  const [encounter, setEncounter] = useState(null); // { monsterType, difficulty, monsterId, name }
+
+  const handleEncounter = (payload) => {
+    // payload comes from Phaser (DungeonScene)
+    setEncounter(payload);
+    setBattleOpen(true);
+  };
+
+  const resolveBattleInPhaser = (victory) => {
+    const game = gameRef.current;
+    if (!game) return;
+    const scene = game.scene.getScene('DungeonScene');
+    if (scene && typeof scene.resolveBattle === 'function') {
+      scene.resolveBattle({ victory });
+    }
+  };
+
+  const handleBattleEnd = (result) => {
+    // terminal end (victory/defeat)
+    setBattleOpen(false);
+    resolveBattleInPhaser(!!result?.victory);
+  };
+
+  const handleBattleClose = () => {
+    // user dismissed modal (treat as non-victory)
+    setBattleOpen(false);
+    resolveBattleInPhaser(false);
+  };
+
   return (
-    <div 
-      className="game-container" 
-      style={{ 
-        minHeight: '100vh', 
+    <div
+      className="game-container"
+      style={{
+        minHeight: '100vh',
         backgroundColor: '#1a1a2e',
         backgroundImage: `url(${uiTiles.backgroundPattern1})`,
         backgroundSize: '64px 64px',
@@ -28,26 +60,27 @@ function App() {
       }}
     >
       <div className="ui-hero-panel" style={{ backgroundImage: `url(${uiTiles.panel})` }}>
-        <h1 className="ui-hero-title">⚔️ Syntax Slayer - Battle System ⚔️</h1>
-        <div className="ui-tagline">
-          <p className="tagline-main">Code. Clash. Conquer.</p>
-          <div className="tagline-words" aria-hidden>
-            <span>Slash Bugs</span>
-            <span>Earn XP</span>
-            <span>Level Up</span>
-          </div>
-        </div>
+        <h1 className="ui-hero-title">Syntax Slayer</h1>
 
-        {/* Battle Modal Example (inline to keep single-section layout) */}
-        <div className="battle-inline">
-          <BattleModalExample />
-        </div>
-
-        {/* Add Phaser canvas under the battle example */}
-        <div style={{ marginTop: '32px' }}>
-          <GameCanvas />
+        {/* Gameplay first */}
+        <div style={{ marginTop: '16px' }}>
+          <GameCanvas
+            onGameReady={(game) => {
+              gameRef.current = game;
+            }}
+            onEncounter={handleEncounter}
+          />
         </div>
       </div>
+
+      {/* Battle modal only when encounter happens */}
+      <BattleModal
+        isOpen={battleOpen}
+        onClose={handleBattleClose}
+        onBattleEnd={handleBattleEnd}
+        monsterData={{ name: encounter?.name || 'BUG MONSTER' }}
+        difficulty={encounter?.difficulty} // <-- new prop we add below
+      />
     </div>
   );
 }
