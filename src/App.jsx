@@ -33,8 +33,6 @@ function App() {
   };
 
   const handleBattleEnd = (result) => {
-    // terminal end (victory/defeat)
-    setBattleOpen(false);
     resolveBattleInPhaser(!!result?.victory);
   };
 

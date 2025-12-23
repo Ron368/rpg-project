@@ -1,25 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { uiTiles } from '../utils/uiAssets';
+import BattleStage from './BattleStage';
 import './BattleModal.css';
 
 const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) => {
-  if (!isOpen) return null;
+  // IMPORTANT: keep hooks unconditional (do NOT early-return before hooks)
+  const stageApiRef = useRef(null);
 
   const [question, setQuestion] = useState(null);
   const [options, setOptions] = useState([]);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
-  const [timeRemaining, setTimeRemaining] = useState(60); // 1 minute countdown
+  const [timeRemaining, setTimeRemaining] = useState(60);
   const [playerHealth, setPlayerHealth] = useState(100);
   const [monsterHealth, setMonsterHealth] = useState(100);
-  // incorrectAttempts removed per updated rules
   const [isAnswered, setIsAnswered] = useState(false);
   const [waitingNext, setWaitingNext] = useState(false);
   const [isCriticalHit, setIsCriticalHit] = useState(false);
   const [battleStartTime, setBattleStartTime] = useState(null);
   const [timeDeducted, setTimeDeducted] = useState(0);
   const [pointsEarned, setPointsEarned] = useState(0);
-  const [showFeedback, setShowFeedback] = useState(null); // 'correct', 'incorrect', or null
+  const [showFeedback, setShowFeedback] = useState(null);
   const [roundResult, setRoundResult] = useState(null);
   const timerRef = useRef(null);
   const questionStartTimeRef = useRef(null);
@@ -27,11 +28,32 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
   const playerHealthRef = useRef(100);
   const monsterHealthRef = useRef(100);
 
-  // keep refs in sync with state so handlers can read latest values synchronously
   useEffect(() => {
     playerHealthRef.current = playerHealth;
     monsterHealthRef.current = monsterHealth;
   }, [playerHealth, monsterHealth]);
+
+  // Drive stage animations from battle events
+  useEffect(() => {
+    const api = stageApiRef.current;
+    if (!api || !isOpen) return;
+
+    if (showFeedback === 'correct') {
+      api.playPlayerAttack();
+      api.playMonsterHit();
+    } else if (showFeedback === 'incorrect' || showFeedback === 'timeout') {
+      api.playMonsterAttack();
+      api.playPlayerHit();
+    }
+  }, [showFeedback, isOpen]);
+
+  useEffect(() => {
+    const api = stageApiRef.current;
+    if (!api || !isOpen || !roundResult) return;
+
+    if (roundResult.victory) api.playMonsterDeath();
+    else api.playPlayerDeath();
+  }, [roundResult, isOpen]);
 
   // Fetch question from Supabase when modal opens
   useEffect(() => {
@@ -444,6 +466,9 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
     return () => clearTimeout(t);
   }, [showFeedback]);
 
+  // NEW: only render after hooks
+  if (!isOpen) return null;
+
   return (
     <div className="battle-modal-overlay" onClick={handleClose}>
       <div
@@ -475,14 +500,11 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
           <div className="battle-header">
             <div className="header-decoration-left"></div>
 
+            {/* REPLACED: header content => embedded battle scene */}
             <div className="header-content">
-              <h2 className="battle-title">⚔️ BATTLE MODE ⚔️</h2>
-              {monsterData && (
-                <div className="monster-name">{monsterData.name || 'BUG MONSTER'}</div>
-              )}
+              <BattleStage onReady={(api) => { stageApiRef.current = api; }} />
             </div>
 
-            {/* NEW: right side = timer + right decoration */}
             <div className="battle-header-right">
               <div className="battle-header-timer" aria-label="Time Remaining">
                 <div className="battle-header-timer-label">TIME</div>
@@ -540,57 +562,78 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
 
             {/* Right column: question + options + feedback */}
             <section className="battle-question-pane">
-              {/* Question Section */}
-              <div className="question-section">
-                {question ? (
-                  <>
-                    <div className="question-label">QUESTION:</div>
-                    <div className="question-text">{question.question}</div>
+              {/* REPLACE question area when the battle ends */}
+              {roundResult ? (
+                <div className="battle-outcome-pane">
+                  <div className={`battle-outcome-card ${roundResult.victory ? 'victory' : 'defeat'}`}>
+                    <h3 style={{ margin: 0, color: roundResult.victory ? '#7fff8f' : '#ff8b8b' }}>
+                      {roundResult.victory ? 'Victory!' : 'Defeat!'}
+                    </h3>
 
-                    <div className="options-container">
-                      {(() => {
-                        const displayedOptions =
-                          options && options.length > 0
-                            ? options
-                            : question
-                              ? [
-                                  question.correct_answer,
-                                  question.wrong_answer_1,
-                                  question.wrong_answer_2,
-                                  question.wrong_answer_3,
-                                ].filter(Boolean)
-                              : [];
-
-                        return displayedOptions.map((option, index) => {
-                          const isSelected = selectedAnswer === option;
-                          const isCorrect = option === question.correct_answer;
-                          let optionClass = 'option-button';
-
-                          if (isAnswered && isSelected) {
-                            optionClass += isCorrect ? ' correct' : ' incorrect';
-                          } else if (isSelected && !isAnswered) {
-                            optionClass += ' selected';
-                          }
-
-                          return (
-                            <button
-                              key={index}
-                              className={optionClass}
-                              onClick={() => handleAnswerSelect(option)}
-                              disabled={!!showFeedback || waitingNext}
-                            >
-                              {option}
-                            </button>
-                          );
-                        });
-                      })()}
+                    <div style={{ marginTop: 10, color: '#cfeffb' }}>
+                      Critical Hit: <strong>{roundResult.isCriticalHit ? 'Yes' : 'No'}</strong>
                     </div>
-                    
-                    {/* Next Question control for non-terminal rounds */}
-                    {waitingNext && (
-                      <div style={{ marginTop: 12 }}>
+                    <div style={{ marginTop: 6 }}>Points Earned: <strong>{roundResult.pointsEarned || 0}</strong></div>
+                    <div style={{ marginTop: 6 }}>Player Health: <strong>{roundResult.playerHealth}%</strong></div>
+                    <div style={{ marginTop: 6 }}>Monster Health: <strong>{roundResult.monsterHealth}%</strong></div>
+
+                    <div className="battle-outcome-actions">
+                      <button className="btn" onClick={handleClose}>
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="question-section">
+                  {question ? (
+                    <>
+                      <div className="question-label">QUESTION:</div>
+                      <div className="question-text">{question.question}</div>
+
+                      <div className="options-container">
+                        {(() => {
+                          const displayedOptions =
+                            options && options.length > 0
+                              ? options
+                              : question
+                                ? [
+                                    question.correct_answer,
+                                    question.wrong_answer_1,
+                                    question.wrong_answer_2,
+                                    question.wrong_answer_3,
+                                  ].filter(Boolean)
+                                : [];
+
+                          return displayedOptions.map((option, index) => {
+                            const isSelected = selectedAnswer === option;
+                            const isCorrect = option === question.correct_answer;
+                            let optionClass = 'option-button';
+
+                            if (isAnswered && isSelected) {
+                              optionClass += isCorrect ? ' correct' : ' incorrect';
+                            } else if (isSelected && !isAnswered) {
+                              optionClass += ' selected';
+                            }
+
+                            return (
+                              <button
+                                key={index}
+                                className={optionClass}
+                                onClick={() => handleAnswerSelect(option)}
+                                disabled={!!showFeedback || waitingNext}
+                              >
+                                {option}
+                              </button>
+                            );
+                          });
+                        })()}
+                      </div>
+
+                      {/* Reserve space to prevent layout shift */}
+                      <div className="next-question-slot">
                         <button
-                          className="btn"
+                          className={`btn next-question-btn ${waitingNext ? '' : 'is-hidden'}`}
                           onClick={() => {
                             setWaitingNext(false);
                             setSelectedAnswer(null);
@@ -598,21 +641,24 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
                             questionStartTimeRef.current = Date.now();
                             fetchQuestion();
                           }}
+                          disabled={!waitingNext || !!showFeedback}
+                          aria-hidden={!waitingNext}
+                          tabIndex={waitingNext ? 0 : -1}
                         >
                           Next Question
                         </button>
                       </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="loading-question">Loading question...</div>
-                )}
-              </div>
+                    </>
+                  ) : (
+                    <div className="loading-question">Loading question...</div>
+                  )}
+                </div>
+              )}
             </section>
           </div>
         </div>
 
-        {/* NEW: Center-screen feedback overlay */}
+        {/* Keep feedback overlay (but hide it during outcome) */}
         {showFeedback && !roundResult && (
           <div className="battle-feedback-overlay" aria-live="polite" aria-atomic="true">
             <div className={`battle-feedback-pop ${showFeedback}`}>
@@ -640,46 +686,6 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
                   <div className="battle-feedback-sub">The monster attacks!</div>
                 </>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* Victory/Defeat Overlay: appears when a side reaches 0% */}
-        {roundResult && (
-          <div
-            className="battle-result-overlay"
-            style={{
-              padding: '1.5rem',
-              background: 'rgba(0,0,0,0.85)',
-              borderTop: '3px solid rgba(255,255,255,0.04)',
-            }}
-          >
-            <h3 style={{ margin: 0, color: roundResult.victory ? '#7fff8f' : '#ff8b8b' }}>{roundResult.victory ? '🎉 Victory!' : '💀 Defeat!'}</h3>
-            <div style={{ marginTop: 8, color: '#cfeffb' }}>Critical Hit: <strong>{roundResult.isCriticalHit ? 'Yes' : 'No'}</strong></div>
-            <div style={{ marginTop: 6 }}>Points Earned: <strong>{roundResult.pointsEarned || 0}</strong></div>
-            <div style={{ marginTop: 6 }}>Player Health: <strong>{roundResult.playerHealth}%</strong></div>
-            <div style={{ marginTop: 6 }}>Monster Health: <strong>{roundResult.monsterHealth}%</strong></div>
-
-            <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-              <button
-                className="btn"
-                onClick={() => {
-                  // Start next battle: reset HP and clear roundResult
-                  setPlayerHealth(100);
-                  setMonsterHealth(100);
-                  playerHealthRef.current = 100;
-                  monsterHealthRef.current = 100;
-                  setPointsEarned(0);
-                  setIsCriticalHit(false);
-                  setRoundResult(null);
-                  setIsAnswered(false);
-                  setTimeRemaining(60);
-                  // start next question
-                  fetchQuestion();
-                }}
-              >
-                Next Battle
-              </button>
             </div>
           </div>
         )}
