@@ -293,6 +293,7 @@
 
 .header-content {
   flex: 1;
+  margin-left: 350px;
   text-align: center;
 }
 
@@ -1086,4 +1087,51 @@
 @keyframes feedbackPopIn {
   from { transform: translateY(10px) scale(0.96); opacity: 0; }
   to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.battle-outcome-pane {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+
+.battle-outcome-card {
+  width: min(760px, 100%);
+  background: rgba(0, 0, 0, 0.78);
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.65),
+    inset 0 0 15px rgba(0,0,0,0.6);
+  padding: 1.4rem 1.5rem;
+  font-family: 'Courier New', 'Monaco', monospace;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.8);
+}
+
+.battle-outcome-card.victory {
+  border-color: rgba(76, 175, 80, 0.9);
+}
+
+.battle-outcome-card.defeat {
+  border-color: rgba(244, 67, 54, 0.9);
+}
+
+.battle-outcome-actions {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.next-question-slot {
+  margin-top: 12px;
+  min-height: 58px; /* reserve ~1 button height so nothing shifts */
+  display: flex;
+  align-items: flex-start;
+}
+
+.next-question-btn.is-hidden {
+  visibility: hidden;  /* keeps layout space */
+  pointer-events: none;
 }
