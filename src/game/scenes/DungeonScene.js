@@ -2,15 +2,20 @@ import Phaser from 'phaser'
 import tilesPNG from '../../assets/tilesets/tilemap.png'
 import dungeonMapUrl from '../../assets/tilemaps/dungeon_level_1.tmj?url'
 import ratRunURL     from '../../assets/characters/enemies/Rat/Rat_Run.png?url'
+import slimeRunURL   from '../../assets/characters/enemies/Slime/Slime_Spiked_Run.png?url'
 
-// Visual scale for the 64x64 frames that contain a 16x16 character.
-// 0.25 -> 16px, 0.5 -> 32px, 0.75 -> ~48px, 1 -> 64px
 const PLAYER_DISPLAY_SCALE = 1.5;
 
-// If your rat run frames face LEFT by default, set this to false
 const RAT_FACES_RIGHT = true;
 // Patrol speed for the rat
-const RAT_SPEED = 40;
+const RAT_SPEED = 40
+
+// Spawn point for slime 
+const SLIME_SPAWN_X = 520
+const SLIME_SPAWN_Y = 160
+
+// Optional tuning
+const SLIME_SPEED = 35
 
 export default class DungeonScene extends Phaser.Scene {
   constructor() {
@@ -21,9 +26,12 @@ export default class DungeonScene extends Phaser.Scene {
     }
 
     this.player = null
-    this.monster = null
+    this.monster = null // rat
+    this.slime = null   
+
     this.cursors = null
-    this.patrolDir = -1
+    this.patrolDir = -1       // rat direction
+    this.slimePatrolDir = 1   
 
     this.ratFrameKeys = []
 
@@ -32,6 +40,9 @@ export default class DungeonScene extends Phaser.Scene {
     // battle gate / cooldown so overlap doesn't re-trigger instantly
     this.inBattle = false
     this.battleCooldownUntil = 0
+
+    // Track which monster triggered the current battle
+    this.activeEncounterType = null
   }
 
   preload() {
@@ -64,6 +75,9 @@ export default class DungeonScene extends Phaser.Scene {
 
     // Small Rat RUN sheet (64x64 frames, 2 rows: first row=4 frames, second row=2 frames)
     this.load.spritesheet('rat_run', ratRunURL, { frameWidth: 64, frameHeight: 64 })
+
+    // NEW: slime run sheet (assumes 64x64 frames like rat; adjust if your sheet differs)
+    this.load.spritesheet('slime_run', slimeRunURL, { frameWidth: 64, frameHeight: 64 })
 
     this.load.on('complete', () => {
       const tex = this.textures.get('tiles')
@@ -169,8 +183,47 @@ export default class DungeonScene extends Phaser.Scene {
     this.monster.play('rat-walk', true)
     this.monster.setFlipX(RAT_FACES_RIGHT ? (this.patrolDir < 0) : (this.patrolDir > 0))
 
-    // Battle trigger
-    this.physics.add.overlap(this.player, this.monster, () => this.onPlayerMonsterCollision(), null, this)
+    // --- Slime animations (re-using the same run sheet style as rat) ---
+    if (this.textures.exists('slime_run') && !this.anims.exists('slime-walk')) {
+      this.anims.create({
+        key: 'slime-walk',
+        frames: this.anims.generateFrameNumbers('slime_run', { start: 0, end: 5 }),
+        frameRate: 10,
+        repeat: -1
+      })
+    }
+
+    // --- Slime spawn (MANUAL LOCATION) ---
+    this.slime = this.physics.add.sprite(SLIME_SPAWN_X, SLIME_SPAWN_Y, 'slime_run', 0).setOrigin(0.5, 0.5)
+    this.slime.setScale(0.9)
+    this.slime.setCollideWorldBounds(true)
+    this.slime.setDepth(9)
+
+    // Hitbox (tweak as needed)
+    this.slime.body.setSize(16, 12, true)
+    this.slime.body.setOffset(24, 40)
+
+    // Start patrolling
+    this.slimePatrolDir = 1
+    this.slime.setVelocityX(SLIME_SPEED * this.slimePatrolDir)
+    this.slime.play('slime-walk', true)
+
+    // Colliders: slime vs obstacle layers (bounce like rat)
+    this.physics.add.collider(this.slime, wallLayer, () => this.handleSlimeBounce())
+    this.physics.add.collider(this.slime, cartsLayer, () => this.handleSlimeBounce())
+    this.physics.add.collider(this.slime, objectsLayer, () => this.handleSlimeBounce())
+
+    // Battle trigger: player vs slime
+    this.physics.add.overlap(this.player, this.slime, () => this.onPlayerSlimeCollision(), null, this)
+    
+    // NEW: Battle trigger: player vs rat
+    this.physics.add.overlap(
+      this.player,
+      this.monster,
+      () => this.onPlayerMonsterCollision(),
+      null,
+      this
+    )
 
     // Input
     this.cursors = this.input.keyboard.addKeys({
@@ -188,6 +241,14 @@ export default class DungeonScene extends Phaser.Scene {
     this.monster.x += this.patrolDir * 2
     this.monster.setFlipX(RAT_FACES_RIGHT ? (this.patrolDir < 0) : (this.patrolDir > 0))
     if (this.anims.exists('rat-walk')) this.monster.play('rat-walk', true)
+  }
+
+  // NEW: bounce helper for slime
+  handleSlimeBounce() {
+    this.slimePatrolDir *= -1
+    this.slime.setVelocityX(SLIME_SPEED * this.slimePatrolDir)
+    this.slime.x += this.slimePatrolDir * 2
+    if (this.anims.exists('slime-walk')) this.slime.play('slime-walk', true)
   }
 
   update() {
@@ -227,21 +288,70 @@ export default class DungeonScene extends Phaser.Scene {
         this.monster.play('rat-walk', true)
       }
     }
+
+    // Keep slime facing consistent with current velocity
+    if (this.slime) {
+      const dir = Math.sign(this.slime.body.velocity.x) || this.slimePatrolDir
+      this.slime.setFlipX(dir < 0)
+
+      // If velocity drops to 0 (corner snag), force a reversal
+      if (Math.abs(this.slime.body.velocity.x) < 1) {
+        this.slimePatrolDir *= -1
+        this.slime.setVelocityX(SLIME_SPEED * this.slimePatrolDir)
+        this.slime.x += this.slimePatrolDir * 2
+        this.slime.play('slime-walk', true)
+      }
+    }
   }
 
   resolveBattle({ victory }) {
     // Called by React when battle ends
-    if (victory && this.monster) {
-      this.monster.destroy()
-      this.monster = null
+
+    // Destroy the monster you actually fought
+    if (victory) {
+      if (this.activeEncounterType === 'rat' && this.monster) {
+        this.monster.destroy()
+        this.monster = null
+      }
+      if (this.activeEncounterType === 'slime' && this.slime) {
+        this.slime.destroy()
+        this.slime = null
+      }
     }
 
-    this.inBattle = false
-    this.battleCooldownUntil = Date.now() + 500
+    this.activeEncounterType = null
 
     // Resume gameplay
+    this.inBattle = false
+    this.battleCooldownUntil = Date.now() + 500
     this.scene.resume()
     this.physics.resume()
+  }
+
+  // NEW: slime collision -> triggers MEDIUM difficulty battle
+  onPlayerSlimeCollision() {
+    if (this.inBattle) return
+    if (Date.now() < this.battleCooldownUntil) return
+    if (!this.slime) return
+
+    this.inBattle = true
+    this.activeEncounterType = 'slime'
+
+    // Freeze everything while modal is open
+    this.player.setVelocity(0, 0)
+    this.slime.setVelocity(0, 0)
+
+    this.physics.pause()
+    this.scene.pause()
+
+    if (this.reactAPI && typeof this.reactAPI.showBattleModal === 'function') {
+      this.reactAPI.showBattleModal({
+        monsterId: 2,
+        monsterType: 'slime',
+        name: 'Slime',
+        difficulty: 'MEDIUM', 
+      })
+    }
   }
 
   onPlayerMonsterCollision() {
@@ -250,7 +360,8 @@ export default class DungeonScene extends Phaser.Scene {
     if (!this.monster) return
 
     this.inBattle = true
-
+    this.activeEncounterType = 'rat' 
+    
     // Freeze everything while modal is open
     this.player.setVelocity(0, 0)
     this.monster.setVelocity(0, 0)

@@ -3,12 +3,17 @@ import ratRunURL from '../../assets/characters/enemies/Rat/Rat_Idle.png?url'
 import ratAttackURL from '../../assets/characters/enemies/Rat/Rat_Attack.png?url'
 import ratDeathURL from '../../assets/characters/enemies/Rat/Rat_Death.png?url'
 import ratHitURL from '../../assets/characters/enemies/Rat/Rat_Hit.png?url'
+import slimeRunURL from '../../assets/characters/enemies/Slime/Slime_Spiked_Idle.png?url'
+import slimeAttackURL from '../../assets/characters/enemies/Slime/Slime_Spiked_Jump.png?url'
+import slimeDeathURL from '../../assets/characters/enemies/Slime/Slime_Spiked_Death.png?url'
+import slimeHitURL from '../../assets/characters/enemies/Slime/Slime_Spiked_Hit.png?url'
 
 export default class BattleScene extends Phaser.Scene {
   constructor() {
     super('BattleScene')
     this.player = null
     this.monster = null
+    this.monsterType = 'rat'
   }
 
   preload() {
@@ -33,12 +38,20 @@ export default class BattleScene extends Phaser.Scene {
     this.load.spritesheet('battle_rat_attack', ratAttackURL, { frameWidth: 64, frameHeight: 64 })
     this.load.spritesheet('battle_rat_death', ratDeathURL, { frameWidth: 64, frameHeight: 64 })
     this.load.spritesheet('battle_rat_hit', ratHitURL, { frameWidth: 64, frameHeight: 64 })
+
     
+    this.load.spritesheet('battle_slime_idle', slimeRunURL, { frameWidth: 64, frameHeight: 64 })
+    this.load.spritesheet('battle_slime_attack', slimeAttackURL, { frameWidth: 64, frameHeight: 64 })
+    this.load.spritesheet('battle_slime_death', slimeDeathURL, { frameWidth: 64, frameHeight: 64 })
+    this.load.spritesheet('battle_slime_hit', slimeHitURL, { frameWidth: 64, frameHeight: 64 })
+
     this.load.on('complete', () => {
       const p = this.textures.get('battle_player')
       const r = this.textures.get('battle_rat_idle')
+      const s = this.textures.get('battle_slime_idle')
       if (p) p.setFilter(Phaser.Textures.FilterMode.NEAREST)
       if (r) r.setFilter(Phaser.Textures.FilterMode.NEAREST)
+      if (s) s.setFilter(Phaser.Textures.FilterMode.NEAREST)
     })
   }
 
@@ -52,6 +65,7 @@ export default class BattleScene extends Phaser.Scene {
 
     // sprites
     this.player = this.add.sprite(140, h - -10, 'battle_player', 0).setOrigin(0.5, 1)
+
     this.monster = this.add.sprite(w - 140, h - -10, 'battle_rat_idle', 0).setOrigin(0.5, 1)
 
     // scale similar to overworld; tweak as desired
@@ -114,8 +128,55 @@ export default class BattleScene extends Phaser.Scene {
       })
     }
 
+    if (!this.anims.exists('battle-slime-idle')) {
+      this.anims.create({
+        key: 'battle-slime-idle',
+        frames: this.anims.generateFrameNumbers('battle_slime_idle', { start: 0, end: 3 }),
+        frameRate: 6,
+        repeat: -1,
+      })
+      this.anims.create({
+        key: 'battle-slime-attack',
+        frames: this.anims.generateFrameNumbers('battle_slime_attack', { start: 0, end: 7 }),
+        frameRate: 16,
+        repeat: 0,
+      })
+      this.anims.create({
+        key: 'battle-slime-hit',
+        frames: this.anims.generateFrameNumbers('battle_slime_hit', { start: 0, end: 3 }),
+        frameRate: 8,
+        repeat: 0,
+      })
+      this.anims.create({
+        key: 'battle-slime-death',
+        frames: this.anims.generateFrameNumbers('battle_slime_death', { start: 0, end: 5 }),
+        frameRate: 8,
+        repeat: 0,
+      })
+    }
+
     this.player.play('battle-player-idle', true)
-    this.monster.play('battle-rat-idle', true)
+
+    // Ensure correct monster visuals on initial mount
+    this.setMonsterType(this.monsterType)
+  }
+
+  // Called from React via BattleStage
+  setMonsterType(type) {
+    const next = (type === 'slime' || type === 'rat') ? type : 'rat'
+    this.monsterType = next
+
+    if (!this.monster) return
+
+    if (next === 'slime') {
+      this.monster.setTexture('battle_slime_idle', 0)
+      this.monster.play('battle-slime-idle', true)
+      this.monster.setFlipX(true)
+    } else {
+      this.monster.setTexture('battle_rat_idle', 0)
+      this.monster.play('battle-rat-idle', true)
+      this.monster.setFlipX(true)
+    }
   }
 
   // --- External API (called from React) ---
@@ -129,9 +190,12 @@ export default class BattleScene extends Phaser.Scene {
 
   playMonsterAttack() {
     if (!this.monster) return
-    this.monster.play('battle-rat-attack', true)
+    const atkKey = this.monsterType === 'slime' ? 'battle-slime-attack' : 'battle-rat-attack'
+    const idleKey = this.monsterType === 'slime' ? 'battle-slime-idle' : 'battle-rat-idle'
+
+    this.monster.play(atkKey, true)
     this.monster.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-      if (this.monster) this.monster.play('battle-rat-idle', true)
+      if (this.monster) this.monster.play(idleKey, true)
     })
   }
 
@@ -145,9 +209,12 @@ export default class BattleScene extends Phaser.Scene {
 
   playMonsterHit() {
     if (!this.monster) return
-    this.monster.play('battle-rat-hit', true)
+    const hitKey = this.monsterType === 'slime' ? 'battle-slime-hit' : 'battle-rat-hit'
+    const idleKey = this.monsterType === 'slime' ? 'battle-slime-idle' : 'battle-rat-idle'
+
+    this.monster.play(hitKey, true)
     this.monster.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-      if (this.monster) this.monster.play('battle-rat-idle', true)
+      if (this.monster) this.monster.play(idleKey, true)
     })
   }
 
@@ -158,7 +225,8 @@ export default class BattleScene extends Phaser.Scene {
 
   playMonsterDeath() {
     if (!this.monster) return
-    this.monster.play('battle-rat-death', true)
+    const deathKey = this.monsterType === 'slime' ? 'battle-slime-death' : 'battle-rat-death'
+    this.monster.play(deathKey, true)
   }
 
   flashSprite(sprite, tint) {
