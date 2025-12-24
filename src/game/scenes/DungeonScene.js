@@ -3,6 +3,7 @@ import tilesPNG from '../../assets/tilesets/tilemap.png'
 import dungeonMapUrl from '../../assets/tilemaps/dungeon_level_1.tmj?url'
 import ratRunURL     from '../../assets/characters/enemies/Rat/Rat_Run.png?url'
 import slimeRunURL   from '../../assets/characters/enemies/Slime/Slime_Spiked_Run.png?url'
+import golemArmorIdleURL from '../../assets/characters/enemies/Golem/Golem_Armor_Idle.png?url'
 
 const PLAYER_DISPLAY_SCALE = 1.5;
 
@@ -17,6 +18,13 @@ const SLIME_SPAWN_Y = 160
 // Optional tuning
 const SLIME_SPEED = 35
 
+// Spawn point for golem 
+const GOLEM_SPAWN_X = 440
+const GOLEM_SPAWN_Y = 100
+
+// TEMP: set to true to show spawn markers/labels
+const DEBUG_SPAWNS = true
+
 export default class DungeonScene extends Phaser.Scene {
   constructor() {
     super('DungeonScene')
@@ -28,6 +36,7 @@ export default class DungeonScene extends Phaser.Scene {
     this.player = null
     this.monster = null // rat
     this.slime = null   
+    this.golem = null
 
     this.cursors = null
     this.patrolDir = -1       // rat direction
@@ -76,8 +85,11 @@ export default class DungeonScene extends Phaser.Scene {
     // Small Rat RUN sheet (64x64 frames, 2 rows: first row=4 frames, second row=2 frames)
     this.load.spritesheet('rat_run', ratRunURL, { frameWidth: 64, frameHeight: 64 })
 
-    // NEW: slime run sheet (assumes 64x64 frames like rat; adjust if your sheet differs)
+    // NEW: slime run sheet 
     this.load.spritesheet('slime_run', slimeRunURL, { frameWidth: 64, frameHeight: 64 })
+
+    // NEW: golem idle sheet 
+    this.load.spritesheet('golem_armor_idle', golemArmorIdleURL, { frameWidth: 64, frameHeight: 64 })
 
     this.load.on('complete', () => {
       const tex = this.textures.get('tiles')
@@ -131,7 +143,7 @@ export default class DungeonScene extends Phaser.Scene {
       console.error('[DungeonScene] Player texture not found; check src/assets/player or src/assets/characters/player')
     }
 
-    // Colliders: player vs Wall only
+    // Colliders: player vs Wall, Objects, and Carts only
     this.physics.add.collider(this.player, wallLayer)
     this.physics.add.collider(this.player, cartsLayer)
     this.physics.add.collider(this.player, objectsLayer)
@@ -187,7 +199,7 @@ export default class DungeonScene extends Phaser.Scene {
     if (this.textures.exists('slime_run') && !this.anims.exists('slime-walk')) {
       this.anims.create({
         key: 'slime-walk',
-        frames: this.anims.generateFrameNumbers('slime_run', { start: 0, end: 5 }),
+        frames: this.anims.generateFrameNumbers('slime_run', { start: 0, end: 3 }),
         frameRate: 10,
         repeat: -1
       })
@@ -213,6 +225,35 @@ export default class DungeonScene extends Phaser.Scene {
     this.physics.add.collider(this.slime, cartsLayer, () => this.handleSlimeBounce())
     this.physics.add.collider(this.slime, objectsLayer, () => this.handleSlimeBounce())
 
+    // --- Golem animations (idle only; no patrol) ---
+    if (this.textures.exists('golem_armor_idle') && !this.anims.exists('golem-idle')) {
+      const tex = this.textures.get('golem_armor_idle')
+      const last = Math.max(0, (tex?.frameTotal ?? 1) - 1)
+      const end = Math.min(3, last)
+      this.anims.create({
+        key: 'golem-idle',
+        frames: this.anims.generateFrameNumbers('golem_armor_idle', { start: 0, end }),
+        frameRate: 6,
+        repeat: -1
+      })
+    }
+
+    // --- Golem spawn (stationary boss) ---
+    this.golem = this.physics.add.sprite(GOLEM_SPAWN_X, GOLEM_SPAWN_Y, 'golem_armor_idle', 0).setOrigin(0.5, 0.5)
+    this.golem.setDepth(50)
+    this.golem.setCollideWorldBounds(true)
+    this.golem.setImmovable(true)
+    this.golem.body.setAllowGravity(false)
+    this.golem.body.setSize(18, 14, true)
+    this.golem.body.setOffset(23, 38)
+    this.golem.setVelocity(0, 0)
+    if (this.anims.exists('golem-idle')) this.golem.play('golem-idle', true)
+
+    // Colliders: golem vs obstacles (mostly to keep it from being pushed)
+    this.physics.add.collider(this.golem, wallLayer)
+    this.physics.add.collider(this.golem, cartsLayer)
+    this.physics.add.collider(this.golem, objectsLayer)
+
     // Battle trigger: player vs slime
     this.physics.add.overlap(this.player, this.slime, () => this.onPlayerSlimeCollision(), null, this)
     
@@ -224,6 +265,9 @@ export default class DungeonScene extends Phaser.Scene {
       null,
       this
     )
+
+    // NEW: Battle trigger: player vs golem
+    this.physics.add.overlap(this.player, this.golem, () => this.onPlayerGolemCollision(), null, this)
 
     // Input
     this.cursors = this.input.keyboard.addKeys({
@@ -317,6 +361,10 @@ export default class DungeonScene extends Phaser.Scene {
         this.slime.destroy()
         this.slime = null
       }
+      if (this.activeEncounterType === 'golem' && this.golem) {
+        this.golem.destroy()
+        this.golem = null
+      }
     }
 
     this.activeEncounterType = null
@@ -376,6 +424,31 @@ export default class DungeonScene extends Phaser.Scene {
         monsterType: 'rat',
         name: 'Rat',
         difficulty: 'EASY',
+      })
+    }
+  }
+
+  // NEW: golem collision -> triggers HARD difficulty battle
+  onPlayerGolemCollision() {
+    if (this.inBattle) return
+    if (Date.now() < this.battleCooldownUntil) return
+    if (!this.golem) return
+
+    this.inBattle = true
+    this.activeEncounterType = 'golem'
+
+    this.player.setVelocity(0, 0)
+    this.golem.setVelocity(0, 0)
+
+    this.physics.pause()
+    this.scene.pause()
+
+    if (this.reactAPI && typeof this.reactAPI.showBattleModal === 'function') {
+      this.reactAPI.showBattleModal({
+        monsterId: 3,          
+        monsterType: 'golem',
+        name: 'Golem',
+        difficulty: 'HARD',    
       })
     }
   }
