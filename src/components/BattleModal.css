@@ -480,6 +480,12 @@
   animation: healthPulse 2s ease-in-out infinite 0.5s;
 }
 
+.armor-health {
+  background: linear-gradient(90deg, #bfc7cf 0%, #9aa7b1 50%, #bfc7cf 100%);
+  background-size: 20px 100%;
+  animation: healthPulse 2s ease-in-out infinite 0.25s;
+}
+
 @keyframes healthPulse {
   0%, 100% {
     filter: brightness(1);

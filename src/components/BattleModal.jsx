@@ -23,16 +23,26 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
   const [pointsEarned, setPointsEarned] = useState(0);
   const [showFeedback, setShowFeedback] = useState(null);
   const [roundResult, setRoundResult] = useState(null);
+  const [armorHealth, setArmorHealth] = useState(0);          
   const timerRef = useRef(null);
   const questionStartTimeRef = useRef(null);
   const questionTimeoutRef = useRef(null);
   const playerHealthRef = useRef(100);
   const monsterHealthRef = useRef(100);
+  const armorHealthRef = useRef(0);                           
+  const [isArmored, setIsArmored] = useState(false);          
+  const didPlayGolemUpgradeRef = useRef(false);               
+
+  const isGolem = (monsterData?.type || 'rat') === 'golem';   
 
   useEffect(() => {
     playerHealthRef.current = playerHealth;
     monsterHealthRef.current = monsterHealth;
   }, [playerHealth, monsterHealth]);
+
+  useEffect(() => {
+    armorHealthRef.current = armorHealth;
+  }, [armorHealth]);
 
   // Drive stage animations from battle events
   useEffect(() => {
@@ -74,6 +84,18 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
       setPlayerHealth(100);
       setMonsterHealth(100);
       setPointsEarned(0);
+
+      // Ensure golem starts with 100% armor
+      if (isGolem) {
+        setArmorHealth(100);
+        armorHealthRef.current = 100;
+        setIsArmored(true);
+      } else {
+        setArmorHealth(0);
+        armorHealthRef.current = 0;
+        setIsArmored(false);
+      }
+
       fetchQuestion();
       setBattleStartTime(Date.now());
       questionStartTimeRef.current = Date.now();
@@ -95,11 +117,15 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
       setIsCriticalHit(false);
       setBattleStartTime(null);
       setTimeDeducted(0);
+      setArmorHealth(0);
+      armorHealthRef.current = 0;
+      setIsArmored(false);
+      didPlayGolemUpgradeRef.current = false;
 
       // Also clear stale stage API
       stageApiRef.current = null;
     }
-  }, [isOpen]);
+  }, [isOpen, question, isGolem]);
 
   // Timer countdown effect - start once when modal opens and run continuously
   useEffect(() => {
@@ -291,25 +317,46 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
 
 
     if (isCorrect) {
-      // Check for Critical Hit (answered within 15 seconds)
       const critical = answerTimeSeconds <= 15;
       setIsCriticalHit(critical);
-
       setShowFeedback('correct');
 
-      // Calculate damage (Critical Hit does 50% damage)
+      // NEW: golem armor absorbs damage first with reduced scaling
+      if (isGolem && armorHealthRef.current > 0) {
+        const armorDamage = critical ? 25 : 10; // armor-only scaling
+        const nextArmor = Math.max(0, armorHealthRef.current - armorDamage);
+        armorHealthRef.current = nextArmor;
+        setArmorHealth(nextArmor);
+
+        // points unchanged (keep your existing points logic)
+        const points = critical ? 200 : 100;
+        setPointsEarned(points);
+        persistPointsAndLeaderboard(points);
+
+        setTimeout(() => {
+          // if armor just broke, switch animations to normal golem
+          if (nextArmor <= 0) {
+            setIsArmored(false);
+            const api = stageApiRef.current;
+            api?.playMonsterArmorBreak?.();
+            api?.setGolemArmored?.(false);
+          }
+          onRoundComplete({ pointsEarned: points, isCriticalHit: critical });
+        }, 1200);
+
+        return;
+      }
+
+      // ...existing non-golem (or armor already broken) monster damage...
       const damage = critical ? 50 : 30;
       const newMonsterHealth = Math.max(0, monsterHealthRef.current - damage);
-      // apply immediately and update ref so other handlers read latest value
       monsterHealthRef.current = newMonsterHealth;
       setMonsterHealth(newMonsterHealth);
 
-      // Award points and persist to leaderboard
       const points = critical ? 200 : 100;
       setPointsEarned(points);
       persistPointsAndLeaderboard(points);
 
-      // Wait a moment then proceed to round completion handling
       setTimeout(() => {
         onRoundComplete({ monsterHealth: newMonsterHealth, pointsEarned: points, isCriticalHit: critical });
       }, 1200);
@@ -590,6 +637,22 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
                     />
                   </div>
                 </div>
+
+                {/* NEW: Golem Armor bar */}
+                {isGolem && (
+                  <div className="health-bar-section">
+                    <div className="health-label">
+                      <span>Armor</span>
+                      <span className="health-value">{armorHealth}%</span>
+                    </div>
+                    <div className="health-bar-wrapper">
+                      <div
+                        className="health-bar armor-health"
+                        style={{ width: `${armorHealth}%`, backgroundColor: '#9aa7b1' }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </aside>
 

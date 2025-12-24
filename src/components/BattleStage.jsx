@@ -48,6 +48,12 @@ export default function BattleStage({ onReady, monsterType = 'rat' }) {
 
         const api = {
           setMonsterType: (t) => scene.setMonsterType?.(t),
+
+          // NEW: golem armor helpers
+          setGolemArmored: (v) => scene.setGolemArmored?.(v),
+          playMonsterUpgrade: () => scene.playMonsterUpgrade?.(),
+          playMonsterArmorBreak: () => scene.playMonsterArmorBreak?.(),
+
           playPlayerAttack: () => scene.playPlayerAttack(),
           playMonsterAttack: () => scene.playMonsterAttack(),
           playPlayerHit: () => scene.playPlayerHit(),

@@ -7,6 +7,15 @@ import slimeRunURL from '../../assets/characters/enemies/Slime/Slime_Spiked_Idle
 import slimeAttackURL from '../../assets/characters/enemies/Slime/Slime_Spiked_Jump.png?url'
 import slimeDeathURL from '../../assets/characters/enemies/Slime/Slime_Spiked_Death.png?url'
 import slimeHitURL from '../../assets/characters/enemies/Slime/Slime_Spiked_Hit.png?url'
+import golemArmorIdleURL from '../../assets/characters/enemies/Golem/Golem_Armor_Idle.png?url'
+import golemArmorHitURL from '../../assets/characters/enemies/Golem/Golem_Armor_Hit.png?url'
+import golemArmorAttackURL from '../../assets/characters/enemies/Golem/Golem_Armor_AttackA.png?url'
+import golemArmorBreakURL from '../../assets/characters/enemies/Golem/Golem_Armor_ArmorBreak.png?url'
+import golemUpgradeURL from '../../assets/characters/enemies/Golem/Golem_Upgrade.png?url'
+import golemIdleURL from '../../assets/characters/enemies/Golem/Golem_IdleA.png?url'
+import golemHitURL from '../../assets/characters/enemies/Golem/Golem_HitA.png?url'
+import golemAttackURL from '../../assets/characters/enemies/Golem/Golem_AttackA.png?url'
+import golemDeathURL from '../../assets/characters/enemies/Golem/Golem_DeathA.png?url'
 
 export default class BattleScene extends Phaser.Scene {
   constructor() {
@@ -14,6 +23,7 @@ export default class BattleScene extends Phaser.Scene {
     this.player = null
     this.monster = null
     this.monsterType = 'rat'
+    this.golemArmored = true // NEW
   }
 
   preload() {
@@ -44,6 +54,17 @@ export default class BattleScene extends Phaser.Scene {
     this.load.spritesheet('battle_slime_attack', slimeAttackURL, { frameWidth: 64, frameHeight: 64 })
     this.load.spritesheet('battle_slime_death', slimeDeathURL, { frameWidth: 64, frameHeight: 64 })
     this.load.spritesheet('battle_slime_hit', slimeHitURL, { frameWidth: 64, frameHeight: 64 })
+
+    this.load.spritesheet('battle_golem_armor_idle', golemArmorIdleURL, { frameWidth: 64, frameHeight: 64 })
+    this.load.spritesheet('battle_golem_armor_hit', golemArmorHitURL, { frameWidth: 64, frameHeight: 64 })
+    this.load.spritesheet('battle_golem_armor_attack', golemArmorAttackURL, { frameWidth: 64, frameHeight: 64 })
+    this.load.spritesheet('battle_golem_armor_break', golemArmorBreakURL, { frameWidth: 64, frameHeight: 64 })
+    this.load.spritesheet('battle_golem_upgrade', golemUpgradeURL, { frameWidth: 64, frameHeight: 64 })
+
+    this.load.spritesheet('battle_golem_idle', golemIdleURL, { frameWidth: 64, frameHeight: 64 })
+    this.load.spritesheet('battle_golem_hit', golemHitURL, { frameWidth: 64, frameHeight: 64 })
+    this.load.spritesheet('battle_golem_attack', golemAttackURL, { frameWidth: 64, frameHeight: 64 })
+    this.load.spritesheet('battle_golem_death', golemDeathURL, { frameWidth: 64, frameHeight: 64 })
 
     this.load.on('complete', () => {
       const p = this.textures.get('battle_player')
@@ -155,6 +176,65 @@ export default class BattleScene extends Phaser.Scene {
       })
     }
 
+    // Golem animations
+    if (!this.anims.exists('battle-golem-armor-idle')) {
+      this.anims.create({
+        key: 'battle-golem-armor-idle',
+        frames: this.anims.generateFrameNumbers('battle_golem_armor_idle', { start: 0, end: 3 }),
+        frameRate: 6,
+        repeat: -1,
+      })
+      this.anims.create({
+        key: 'battle-golem-armor-attack',
+        frames: this.anims.generateFrameNumbers('battle_golem_armor_attack', { start: 0, end: 10 }),
+        frameRate: 10,
+        repeat: 0,
+      })
+      this.anims.create({
+        key: 'battle-golem-armor-hit',
+        frames: this.anims.generateFrameNumbers('battle_golem_armor_hit', { start: 0, end: 4 }),
+        frameRate: 10,
+        repeat: 0,
+      })
+      this.anims.create({
+        key: 'battle-golem-upgrade',
+        frames: this.anims.generateFrameNumbers('battle_golem_upgrade', { start: 0, end: 10 }),
+        frameRate: 10,
+        repeat: 0,
+      })
+      this.anims.create({
+        key: 'battle-golem-armor-break',
+        frames: this.anims.generateFrameNumbers('battle_golem_armor_break', { start: 0, end: 4 }),
+        frameRate: 10,
+        repeat: 0,
+      })
+
+      this.anims.create({
+        key: 'battle-golem-idle',
+        frames: this.anims.generateFrameNumbers('battle_golem_idle', { start: 0, end: 3 }),
+        frameRate: 6,
+        repeat: -1,
+      })
+      this.anims.create({
+        key: 'battle-golem-attack',
+        frames: this.anims.generateFrameNumbers('battle_golem_attack', { start: 0, end: 11 }),
+        frameRate: 10,
+        repeat: 0,
+      })
+      this.anims.create({
+        key: 'battle-golem-hit',
+        frames: this.anims.generateFrameNumbers('battle_golem_hit', { start: 0, end: 4 }),
+        frameRate: 10,
+        repeat: 0,
+      })
+      this.anims.create({
+        key: 'battle-golem-death',
+        frames: this.anims.generateFrameNumbers('battle_golem_death', { start: 0, end: 4 }),
+        frameRate: 8,
+        repeat: 0,
+      })
+    }
+
     this.player.play('battle-player-idle', true)
 
     // Ensure correct monster visuals on initial mount
@@ -163,10 +243,15 @@ export default class BattleScene extends Phaser.Scene {
 
   // Called from React via BattleStage
   setMonsterType(type) {
-    const next = (type === 'slime' || type === 'rat') ? type : 'rat'
+    const next = (type === 'slime' || type === 'rat' || type === 'golem') ? type : 'rat'
     this.monsterType = next
 
     if (!this.monster) return
+
+    if (next === 'golem') {
+      this._applyGolemVisuals()
+      return
+    }
 
     if (next === 'slime') {
       this.monster.setTexture('battle_slime_idle', 0)
@@ -177,6 +262,43 @@ export default class BattleScene extends Phaser.Scene {
       this.monster.play('battle-rat-idle', true)
       this.monster.setFlipX(true)
     }
+  }
+
+  // NEW
+  setGolemArmored(v) {
+    this.golemArmored = !!v
+    if (this.monsterType === 'golem') this._applyGolemVisuals()
+  }
+
+  // NEW
+  _applyGolemVisuals() {
+    if (!this.monster) return
+    if (this.golemArmored) {
+      this.monster.setTexture('battle_golem_armor_idle', 0)
+      this.monster.play('battle-golem-armor-idle', true)
+    } else {
+      this.monster.setTexture('battle_golem_idle', 0)
+      this.monster.play('battle-golem-idle', true)
+    }
+    this.monster.setFlipX(true)
+  }
+
+  // NEW: upgrade animation (gains armor)
+  playMonsterUpgrade() {
+    if (this.monsterType !== 'golem' || !this.monster) return
+    this.monster.play('battle-golem-upgrade', true)
+    this.monster.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+      this.setGolemArmored(true)
+    })
+  }
+
+  // NEW: armor break animation (switch to normal golem)
+  playMonsterArmorBreak() {
+    if (this.monsterType !== 'golem' || !this.monster) return
+    this.monster.play('battle-golem-armor-break', true)
+    this.monster.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+      this.setGolemArmored(false)
+    })
   }
 
   // --- External API (called from React) ---
@@ -190,9 +312,19 @@ export default class BattleScene extends Phaser.Scene {
 
   playMonsterAttack() {
     if (!this.monster) return
+
+    if (this.monsterType === 'golem') {
+      const atkKey = this.golemArmored ? 'battle-golem-armor-attack' : 'battle-golem-attack'
+      const idleKey = this.golemArmored ? 'battle-golem-armor-idle' : 'battle-golem-idle'
+      this.monster.play(atkKey, true)
+      this.monster.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+        if (this.monster) this.monster.play(idleKey, true)
+      })
+      return
+    }
+
     const atkKey = this.monsterType === 'slime' ? 'battle-slime-attack' : 'battle-rat-attack'
     const idleKey = this.monsterType === 'slime' ? 'battle-slime-idle' : 'battle-rat-idle'
-
     this.monster.play(atkKey, true)
     this.monster.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
       if (this.monster) this.monster.play(idleKey, true)
@@ -209,9 +341,19 @@ export default class BattleScene extends Phaser.Scene {
 
   playMonsterHit() {
     if (!this.monster) return
+
+    if (this.monsterType === 'golem') {
+      const hitKey = this.golemArmored ? 'battle-golem-armor-hit' : 'battle-golem-hit'
+      const idleKey = this.golemArmored ? 'battle-golem-armor-idle' : 'battle-golem-idle'
+      this.monster.play(hitKey, true)
+      this.monster.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+        if (this.monster) this.monster.play(idleKey, true)
+      })
+      return
+    }
+
     const hitKey = this.monsterType === 'slime' ? 'battle-slime-hit' : 'battle-rat-hit'
     const idleKey = this.monsterType === 'slime' ? 'battle-slime-idle' : 'battle-rat-idle'
-
     this.monster.play(hitKey, true)
     this.monster.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
       if (this.monster) this.monster.play(idleKey, true)
@@ -225,6 +367,11 @@ export default class BattleScene extends Phaser.Scene {
 
   playMonsterDeath() {
     if (!this.monster) return
+    if (this.monsterType === 'golem') {
+      this.monster.play('battle-golem-death', true)
+      return
+    }
+    
     const deathKey = this.monsterType === 'slime' ? 'battle-slime-death' : 'battle-rat-death'
     this.monster.play(deathKey, true)
   }
