@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { uiTiles } from '../utils/uiAssets';
 import BattleStage from './BattleStage';
+import { audioManager } from '../services/audioManager';
 import './BattleModal.css';
 
 const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) => {
@@ -41,9 +42,13 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
     if (showFeedback === 'correct') {
       api.playPlayerAttack();
       api.playMonsterHit();
+      audioManager.playSfx('attack');
+      audioManager.playSfx('hit');
     } else if (showFeedback === 'incorrect' || showFeedback === 'timeout') {
       api.playMonsterAttack();
       api.playPlayerHit();
+      audioManager.playSfx('attack');
+      audioManager.playSfx('hit');
     }
   }, [showFeedback, isOpen]);
 
@@ -51,8 +56,15 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
     const api = stageApiRef.current;
     if (!api || !isOpen || !roundResult) return;
 
-    if (roundResult.victory) api.playMonsterDeath();
-    else api.playPlayerDeath();
+    if (roundResult.victory) {
+      api.playMonsterDeath();
+      audioManager.playVictoryBgm(); 
+    } else {
+      api.playPlayerDeath();
+      audioManager.playDefeatBgm(); 
+    }
+
+    audioManager.playSfx('death');
   }, [roundResult, isOpen]);
 
   // Fetch question from Supabase when modal opens
