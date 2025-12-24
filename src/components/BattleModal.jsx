@@ -88,6 +88,16 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
       setTimeRemaining(60);
       setShowFeedback(null);
       setSelectedAnswer(null);
+
+      setRoundResult(null);
+      setWaitingNext(false);
+      setIsAnswered(false);
+      setIsCriticalHit(false);
+      setBattleStartTime(null);
+      setTimeDeducted(0);
+
+      // Also clear stale stage API
+      stageApiRef.current = null;
     }
   }, [isOpen]);
 
@@ -428,6 +438,14 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
     setTimeDeducted(0);
     setPointsEarned(0);
     setShowFeedback(null);
+
+    // FIX: clear outcome state too
+    setRoundResult(null);
+    setWaitingNext(false);
+
+    // Clear stale stage API reference
+    stageApiRef.current = null;
+
     questionStartTimeRef.current = null;
     if (questionTimeoutRef.current) {
       clearTimeout(questionTimeoutRef.current);
@@ -514,7 +532,10 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
 
             {/* REPLACED: header content => embedded battle scene */}
             <div className="header-content">
-              <BattleStage onReady={(api) => { stageApiRef.current = api; }} />
+              <BattleStage
+                monsterType={monsterData?.type || 'rat'}
+                onReady={(api) => { stageApiRef.current = api; }}
+              />
             </div>
 
             <div className="battle-header-right">

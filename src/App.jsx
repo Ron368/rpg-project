@@ -17,6 +17,7 @@ function App() {
 
   const [battleOpen, setBattleOpen] = useState(false);
   const [encounter, setEncounter] = useState(null); // { monsterType, difficulty, monsterId, name }
+  const lastBattleResultRef = useRef(null);
 
   const handleEncounter = (payload) => {
     // payload comes from Phaser (DungeonScene)
@@ -34,13 +35,18 @@ function App() {
   };
 
   const handleBattleEnd = (result) => {
-    resolveBattleInPhaser(!!result?.victory);
+    // Store outcome; resume overworld when user closes the modal
+    lastBattleResultRef.current = result;
   };
 
   const handleBattleClose = () => {
-    // user dismissed modal (treat as non-victory)
+    const victory = !!lastBattleResultRef.current?.victory;
+
     setBattleOpen(false);
-    resolveBattleInPhaser(false);
+    resolveBattleInPhaser(victory);
+
+    lastBattleResultRef.current = null;
+    setEncounter(null);
   };
 
   useEffect(() => {
@@ -99,8 +105,11 @@ function App() {
         isOpen={battleOpen}
         onClose={handleBattleClose}
         onBattleEnd={handleBattleEnd}
-        monsterData={{ name: encounter?.name || 'BUG MONSTER' }}
-        difficulty={encounter?.difficulty} 
+        monsterData={{
+          name: encounter?.name || 'BUG MONSTER',
+          type: encounter?.monsterType || 'rat',
+        }}
+        difficulty={encounter?.difficulty}
       />
     </div>
   );

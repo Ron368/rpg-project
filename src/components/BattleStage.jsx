@@ -6,9 +6,10 @@ import BattleScene from '../game/scenes/BattleScene'
  * Mounts a small Phaser "battle stage" inside the BattleModal header.
  * Exposes an imperative API via onReady(api).
  */
-export default function BattleStage({ onReady }) {
+export default function BattleStage({ onReady, monsterType = 'rat' }) {
   const hostRef = useRef(null)
   const gameRef = useRef(null)
+  const sceneRef = useRef(null)
 
   // keep latest callback without re-creating the Phaser game
   const onReadyRef = useRef(onReady)
@@ -38,7 +39,15 @@ export default function BattleStage({ onReady }) {
     const attach = () => {
       const scene = game.scene.getScene('BattleScene')
       if (scene) {
+        sceneRef.current = scene
+
+        // Ensure correct monster immediately
+        if (typeof scene.setMonsterType === 'function') {
+          scene.setMonsterType(monsterType)
+        }
+
         const api = {
+          setMonsterType: (t) => scene.setMonsterType?.(t),
           playPlayerAttack: () => scene.playPlayerAttack(),
           playMonsterAttack: () => scene.playMonsterAttack(),
           playPlayerHit: () => scene.playPlayerHit(),
@@ -46,6 +55,7 @@ export default function BattleStage({ onReady }) {
           playPlayerDeath: () => scene.playPlayerDeath(),
           playMonsterDeath: () => scene.playMonsterDeath(),
         }
+
         onReadyRef.current?.(api)
         return
       }
@@ -56,8 +66,14 @@ export default function BattleStage({ onReady }) {
     return () => {
       game.destroy(true)
       gameRef.current = null
+      sceneRef.current = null
     }
   }, []) 
+
+  // React to monsterType changes while the modal is open
+  useEffect(() => {
+    sceneRef.current?.setMonsterType?.(monsterType)
+  }, [monsterType])
 
   return <div ref={hostRef} style={{ width: '520px', maxWidth: '100%', height: '140px' }} />
 }
