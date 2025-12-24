@@ -3,6 +3,7 @@ import { testSupabaseConnection } from './services/supabaseClient';
 import GameCanvas from './components/GameCanvas';
 import BattleModal from './components/BattleModal';
 import { uiTiles } from './utils/uiAssets';
+import { audioManager } from './services/audioManager';
 import './App.css';
 
 function App() {
@@ -42,6 +43,28 @@ function App() {
     resolveBattleInPhaser(false);
   };
 
+  useEffect(() => {
+    const unlock = () => {
+      audioManager.unlock();
+      audioManager.playOverworldBgm();
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (battleOpen) audioManager.playBattleBgm();
+    else audioManager.playOverworldBgm();
+  }, [battleOpen]);
+
   return (
     <div
       className="game-container"
@@ -77,7 +100,7 @@ function App() {
         onClose={handleBattleClose}
         onBattleEnd={handleBattleEnd}
         monsterData={{ name: encounter?.name || 'BUG MONSTER' }}
-        difficulty={encounter?.difficulty} // <-- new prop we add below
+        difficulty={encounter?.difficulty} 
       />
     </div>
   );
