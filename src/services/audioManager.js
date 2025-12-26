@@ -3,9 +3,10 @@ const FILES = {
     overworld: '/assets/audio/overworld_bgm.mp3',
     battle: '/assets/audio/battle_bgm.mp3',
 
-    // NEW: outcome music placeholders
-    victory: '/assets/audio/victory.mp3', 
-    defeat: '/assets/audio/defeat.mp3',   
+    golemBoss: '/assets/audio/boss.mp3',
+
+    victory: '/assets/audio/victory.mp3',
+    defeat: '/assets/audio/defeat.mp3',
   },
   sfx: {
     hit: '/assets/audio/hitHurt.wav',
@@ -22,7 +23,8 @@ class AudioManager {
     this._bgmOverworld = null;
     this._bgmBattle = null;
 
-    // NEW
+    this._bgmGolemBoss = null;
+
     this._bgmVictory = null;
     this._bgmDefeat = null;
 
@@ -43,8 +45,9 @@ class AudioManager {
 
     this._bgmOverworld = this._makeBgm(FILES.bgm.overworld);
     this._bgmBattle = this._makeBgm(FILES.bgm.battle);
-
-    // NEW
+    
+    this._bgmGolemBoss = this._makeBgm(FILES.bgm.golemBoss);
+    
     this._bgmVictory = this._makeBgm(FILES.bgm.victory);
     this._bgmDefeat = this._makeBgm(FILES.bgm.defeat);
 
@@ -55,18 +58,24 @@ class AudioManager {
     this._muted = !!muted;
     const v = this._muted ? 0 : this.bgmVolume;
 
-    // ...existing code...
     if (this._bgmOverworld) this._bgmOverworld.volume = v;
     if (this._bgmBattle) this._bgmBattle.volume = v;
 
-    // NEW
+    if (this._bgmGolemBoss) this._bgmGolemBoss.volume = v;
+    
     if (this._bgmVictory) this._bgmVictory.volume = v;
     if (this._bgmDefeat) this._bgmDefeat.volume = v;
   }
 
-  // NEW helper: ensure only one BGM plays at once
+  // Ensure only one BGM plays at once
   _pauseAllExcept(except) {
-    for (const a of [this._bgmOverworld, this._bgmBattle, this._bgmVictory, this._bgmDefeat]) {
+    for (const a of [
+      this._bgmOverworld,
+      this._bgmBattle,
+      this._bgmGolemBoss,
+      this._bgmVictory,
+      this._bgmDefeat,
+    ]) {
       if (!a || a === except) continue;
       if (!a.paused) a.pause();
     }
@@ -88,7 +97,14 @@ class AudioManager {
     }
   }
 
-  // NEW
+  async playGolemBossBgm() {
+    if (!this._unlocked) return;
+    this._pauseAllExcept(this._bgmGolemBoss);
+    if (this._bgmGolemBoss && this._bgmGolemBoss.paused) {
+      try { await this._bgmGolemBoss.play(); } catch (_) {}
+    }
+  }
+
   async playVictoryBgm() {
     if (!this._unlocked) return;
     this._pauseAllExcept(this._bgmVictory);
@@ -98,7 +114,6 @@ class AudioManager {
     }
   }
 
-  // NEW
   async playDefeatBgm() {
     if (!this._unlocked) return;
     this._pauseAllExcept(this._bgmDefeat);
@@ -109,7 +124,13 @@ class AudioManager {
   }
 
   stopAllBgm() {
-    for (const a of [this._bgmOverworld, this._bgmBattle, this._bgmVictory, this._bgmDefeat]) {
+    for (const a of [
+      this._bgmOverworld,
+      this._bgmBattle,
+      this._bgmGolemBoss,
+      this._bgmVictory,
+      this._bgmDefeat,
+    ]) {
       if (!a) continue;
       a.pause();
       a.currentTime = 0;
@@ -121,7 +142,7 @@ class AudioManager {
     const src = FILES.sfx[name];
     if (!src) return;
 
-    const a = new Audio(src); // new instance so multiple SFX can overlap
+    const a = new Audio(src);
     a.preload = 'auto';
     a.volume = this.sfxVolume;
     a.play().catch(() => {});
@@ -129,4 +150,4 @@ class AudioManager {
 }
 
 export const audioManager = new AudioManager();
-export const audioFiles = FILES; // optional: expose placeholder paths
+export const audioFiles = FILES;
