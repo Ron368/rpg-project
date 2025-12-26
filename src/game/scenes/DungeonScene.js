@@ -52,9 +52,21 @@ export default class DungeonScene extends Phaser.Scene {
 
     // Track which monster triggered the current battle
     this.activeEncounterType = null
+
+    this.loadingProgress = 0
+    this._created = false
   }
 
   preload() {
+    this.load.on('progress', (v) => {
+      this.loadingProgress = v
+      this.reactAPI?.onLoadingProgress?.(v)
+    })
+    this.load.once('complete', () => {
+      this.loadingProgress = 1
+      this.reactAPI?.onLoadingProgress?.(1)
+    })
+
     // Map + tiles
     this.load.image('tiles', tilesPNG)
     this.load.tilemapTiledJSON('dungeon-level-1', dungeonMapUrl)
@@ -82,13 +94,13 @@ export default class DungeonScene extends Phaser.Scene {
     }
     console.log('[DungeonScene] Rat frames discovered:', this.ratFrameKeys)
 
-    // Small Rat RUN sheet (64x64 frames, 2 rows: first row=4 frames, second row=2 frames)
+    // Small Rat RUN sheet 
     this.load.spritesheet('rat_run', ratRunURL, { frameWidth: 64, frameHeight: 64 })
 
-    // NEW: slime run sheet 
+    // slime run sheet 
     this.load.spritesheet('slime_run', slimeRunURL, { frameWidth: 64, frameHeight: 64 })
 
-    // NEW: golem idle sheet 
+    // golem idle sheet 
     this.load.spritesheet('golem_armor_idle', golemArmorIdleURL, { frameWidth: 64, frameHeight: 64 })
 
     this.load.on('complete', () => {
@@ -162,7 +174,7 @@ export default class DungeonScene extends Phaser.Scene {
     cam.setZoom(z)
     cam.centerOn(map.widthInPixels / 2, map.heightInPixels / 2)
 
-    // Optional: prevent black bars from looking “black”
+    // Prevent black bars from looking “black”
     cam.setBackgroundColor('#1a1a2e')
 
     // Rat: use run sheet
@@ -186,8 +198,6 @@ export default class DungeonScene extends Phaser.Scene {
     this.physics.add.collider(this.monster, wallLayer, () => this.handleRatBounce())
     this.physics.add.collider(this.monster, cartsLayer, () => this.handleRatBounce())
     this.physics.add.collider(this.monster, objectsLayer, () => this.handleRatBounce())
-    // Optional floor collider:
-    // this.physics.add.collider(this.monster, dungeonLayer, () => this.handleRatBounce())
 
     // Patrol start
     this.patrolDir = -1
@@ -276,6 +286,11 @@ export default class DungeonScene extends Phaser.Scene {
       down: Phaser.Input.Keyboard.KeyCodes.S,
       right: Phaser.Input.Keyboard.KeyCodes.D
     })
+
+    if (!this._created) {
+      this._created = true
+      this.reactAPI?.onSceneReady?.()
+    }
   }
 
   // Helper: reverse rat when hitting walls/obstacles
