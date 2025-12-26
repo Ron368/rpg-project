@@ -674,6 +674,21 @@ const BattleModal = ({ isOpen, onClose, onBattleEnd, monsterData, difficulty }) 
                     <div style={{ marginTop: 6 }}>Monster Health: <strong>{roundResult.monsterHealth}%</strong></div>
 
                     <div className="battle-outcome-actions">
+                      {/* NEW: show leaderboard link on Victory only */}
+                      {roundResult.victory && (
+                        <button 
+                          className="btn leaderboard-btn"
+                        >
+                          <a 
+                            href="/leaderboard.html"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                          Leaderboard
+                          </a>
+                        </button>
+                      )}
+                      
                       <button className="btn" onClick={handleClose}>
                         Close
                       </button>
